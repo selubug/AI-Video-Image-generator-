@@ -1,9 +1,12 @@
 {
   "name": "imagedata",
+  "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.8.0",
   "scripts": {
-    "build": "turbo run build",
     "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
@@ -16,9 +19,12 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "npm@10.8.2",
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@runwayml/sdk": "^2.0.1",
+    "openai": "4"
+  }
 }

@@ -1,0 +1,22 @@
+-- Insert slider presets
+INSERT INTO public.presets (name, category, content) VALUES
+    ('Sharpness', 'Slider', '{"description": "Controls edge clarity and fine detail", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Contrast', 'Slider', '{"description": "Adjusts difference between lights and darks", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Saturation', 'Slider', '{"description": "Boosts or softens color intensity", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Brightness', 'Slider', '{"description": "Overall image luminance", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Hue', 'Slider', '{"description": "Shifts overall color tone across the spectrum", "type": "slider", "min": 0, "max": 360, "default": 0}'),
+    ('Vibrance', 'Slider', '{"description": "Adjusts muted colors while preserving skin tones", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Shadows', 'Slider', '{"description": "Lifts or deepens dark areas", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Highlights', 'Slider', '{"description": "Recovers or boosts bright areas", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Temperature', 'Slider', '{"description": "Warms (yellow/orange) or cools (blue) tones", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Tint', 'Slider', '{"description": "Adjusts green/magenta balance", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Texture', 'Slider', '{"description": "Emphasizes fine surface detail", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Clarity', 'Slider', '{"description": "Midtone contrast for extra punch or softening", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Realness', 'Slider', '{"description": "Scale from abstract to realistic", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Imagination Level', 'Slider', '{"description": "From realistic to surreal or fantastical", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Gamma', 'Slider', '{"description": "Midtone luminance control, affects brightness curve", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Noise', 'Slider', '{"description": "Adds or removes visual grain", "type": "slider", "min": 0, "max": 100, "default": 0}'),
+    ('Vignette Strength', 'Slider', '{"description": "Darkens edges to focus the center", "type": "slider", "min": 0, "max": 100, "default": 0}'),
+    ('Glow', 'Slider', '{"description": "Enhances light bloom and glow effects", "type": "slider", "min": 0, "max": 100, "default": 0}'),
+    ('Depth of Field', 'Slider', '{"description": "Controls background blur vs. focus range", "type": "slider", "min": 0, "max": 100, "default": 50}'),
+    ('Lens Distortion', 'Slider', '{"description": "Adds fisheye or barrel/pincushion warp", "type": "slider", "min": 0, "max": 100, "default": 0}'); 

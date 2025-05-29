@@ -1,0 +1,14 @@
+{
+  "name": "@prompt-helper/api-client",
+  "version": "0.1.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3"
+  }
+}
+

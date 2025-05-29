@@ -1,0 +1,22 @@
+-- Insert scene composition presets
+INSERT INTO public.presets (name, category, content) VALUES
+    ('Centered Composition', 'Composition', 'Subject placed in center of frame with symmetrical layout and balanced elements'),
+    ('Rule of Thirds', 'Composition', 'Subject aligned to one-third of frame creating visually balanced and dynamic layout'),
+    ('Negative Space', 'Composition', 'Ample empty space around subject creating minimalist, contemplative atmosphere'),
+    ('Crowded Composition', 'Composition', 'Densely packed frame with multiple elements creating vibrant, energetic scene'),
+    ('Leading Lines', 'Composition', 'Architectural elements or natural lines guiding viewer''s eye toward subject'),
+    ('Foreground Framing', 'Composition', 'Natural elements in front creating organic frame around main subject'),
+    ('Symmetrical Balance', 'Composition', 'Mirrored elements on both sides creating formal, harmonious composition'),
+    ('Asymmetrical Balance', 'Composition', 'Uneven distribution of elements creating dynamic, energetic layout'),
+    ('Diagonal Flow', 'Composition', 'Subjects aligned diagonally creating movement and tension across frame'),
+    ('Golden Ratio', 'Composition', 'Natural spiral flow guiding subject placement for harmonious composition'),
+    ('Top-Heavy Composition', 'Composition', 'Emphasis on upper frame with grounded base creating stable foundation'),
+    ('Bottom-Heavy Composition', 'Composition', 'Emphasis on lower frame with towering elements above creating drama'),
+    ('Minimalist Composition', 'Composition', 'Clean layout with few elements and open space creating serene atmosphere'),
+    ('Maximalist Composition', 'Composition', 'Visually dense scene with layered textures and multiple elements'),
+    ('Over-the-Shoulder View', 'Composition', 'Perspective from behind subject showing partial view of back and head'),
+    ('Frontal View', 'Composition', 'Direct, head-on angle of subject creating immediate connection'),
+    ('Profile View', 'Composition', 'Subject facing sideways showing side profile and silhouette'),
+    ('Off-Center Framing', 'Composition', 'Subject slightly shifted from center creating intentional visual tension'),
+    ('Bird''s Eye Composition', 'Composition', 'View from above creating spatial overview and pattern recognition'),
+    ('Worm''s Eye Composition', 'Composition', 'View from below creating dramatic upward angle and imposing presence'); 

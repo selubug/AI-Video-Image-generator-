@@ -1,0 +1,22 @@
+-- Insert utility presets
+INSERT INTO public.presets (name, category, content) VALUES
+    ('Make Me Old', 'Utility', 'Upload a selfie to get an aged version of your face with realistic wrinkles and grey hair'),
+    ('Make Me Younger', 'Utility', 'Reverse-aging effect using AI rejuvenation to create a younger version of your face'),
+    ('Baby Generator', 'Utility', 'Upload two faces to generate possible child appearance based on parent features'),
+    ('Gender Swap', 'Utility', 'Upload face to flip gender while maintaining facial identity and characteristics'),
+    ('Celebrity Lookalike', 'Utility', 'Upload photo to get matched to a celebrity or generate you in their style'),
+    ('Cartoon Me', 'Utility', 'Upload face to convert into cartoon or anime version with stylized features'),
+    ('Pixar-fy Me', 'Utility', 'Upload photo to generate you in Pixar 3D animated style with signature character design'),
+    ('AI Headshot Creator', 'Utility', 'Upload selfie to create polished, LinkedIn-style professional headshot'),
+    ('Sketch My Photo', 'Utility', 'Upload image to convert into detailed pencil sketch or digital line art'),
+    ('Stylize Me', 'Utility', 'Upload photo to apply selected artistic style (Van Gogh, Ghibli, etc.)'),
+    ('Photo to Painting', 'Utility', 'Transform any uploaded image into oil, watercolor, or acrylic painting style'),
+    ('Background Remover', 'Utility', 'Upload subject to create PNG with transparent background for easy compositing'),
+    ('Outfit Changer', 'Utility', 'Upload portrait to try on different fashion styles (streetwear, suit, cosplay)'),
+    ('Virtual Makeup Test', 'Utility', 'Upload face to apply various makeup looks (glam, natural, fantasy)'),
+    ('Tattoo Preview', 'Utility', 'Upload body photo to apply custom tattoos and test placement/design'),
+    ('Face Merge / Morph', 'Utility', 'Blend two faces into a smooth composite image with balanced features'),
+    ('Before & After Filter', 'Utility', 'Split image style showing original on left and transformed version on right'),
+    ('Pet Portrait Generator', 'Utility', 'Upload pet to create stylized versions (painting, cartoon, fantasy)'),
+    ('AI Clone Generator', 'Utility', 'Upload multiple images to generate new images in same style/persona'),
+    ('Outfit to AI Model', 'Utility', 'Upload clothing item photo to generate a model wearing it in studio setting'); 

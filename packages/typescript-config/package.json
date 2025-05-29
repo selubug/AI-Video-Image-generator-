@@ -5,5 +5,8 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "react-intersection-observer": "^9.16.0"
   }
 }

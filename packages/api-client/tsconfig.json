@@ -1,0 +1,11 @@
+// packages/api-client/tsconfig.json
+{
+    "extends": "../../tsconfig.base.json", // Inherit base settings if you have one at the root
+    "compilerOptions": {
+      "outDir": "dist",                  // Output compiled JS to 'dist' folder
+      "declaration": true,             // Generate .d.ts type definition files
+      "declarationMap": true           // Generate source maps for types
+    },
+    "include": ["src"],                // Only compile files in the 'src' directory
+    "exclude": ["node_modules", "dist"]
+  }

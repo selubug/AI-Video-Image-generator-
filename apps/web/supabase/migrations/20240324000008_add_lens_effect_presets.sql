@@ -1,0 +1,22 @@
+-- Insert lens effect presets
+INSERT INTO public.presets (name, category, content) VALUES
+    ('Bokeh', 'Lens Effect', 'Artistic blur effect creating soft, out-of-focus points of light'),
+    ('Depth of Field', 'Lens Effect', 'Selective focus effect with sharp subject and blurred background'),
+    ('Lens Flare', 'Lens Effect', 'Light artifacts and streaks created by bright light sources'),
+    ('Anamorphic Lens', 'Lens Effect', 'Wide aspect ratio with characteristic horizontal lens flares'),
+    ('Light Leaks', 'Lens Effect', 'Accidental light exposure creating colorful streaks and flares'),
+    ('Tilt-Shift', 'Lens Effect', 'Selective focus effect creating miniature-like appearance'),
+    ('Chromatic Aberration', 'Lens Effect', 'Color fringing effect at high-contrast edges'),
+    ('Soft Focus', 'Lens Effect', 'Gentle blur effect creating dreamy, ethereal atmosphere'),
+    ('Motion Blur', 'Lens Effect', 'Blur effect simulating movement and speed'),
+    ('Vignette', 'Lens Effect', 'Darkening of image corners creating focus on center'),
+    ('Shallow Focus', 'Lens Effect', 'Extremely narrow depth of field with strong background blur'),
+    ('Bloom', 'Lens Effect', 'Glowing effect around bright areas creating ethereal atmosphere'),
+    ('Double Exposure', 'Lens Effect', 'Overlapping of multiple images creating surreal effect'),
+    ('Gaussian Blur', 'Lens Effect', 'Smooth, uniform blur effect across the image'),
+    ('Fisheye Lens', 'Lens Effect', 'Extreme wide-angle view with characteristic barrel distortion'),
+    ('Split Diopter', 'Lens Effect', 'Simultaneous focus on near and far subjects'),
+    ('Color Fringing', 'Lens Effect', 'Color separation at high-contrast edges'),
+    ('Cinemascope Effect', 'Lens Effect', 'Wide aspect ratio with characteristic lens artifacts'),
+    ('Barrel Distortion', 'Lens Effect', 'Curved distortion effect at image edges'),
+    ('Ghosting', 'Lens Effect', 'Faint secondary image creating ethereal, transparent effect'); 
