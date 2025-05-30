@@ -284,8 +284,8 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
                          (mode === 'video' && selectedModel === 'stability');
 
   // Determine if the selected model supports image reference
-  const supportsImageReference = ['gpt4o', 'recraft', 'kling'].includes(selectedModel) || 
-    (mode === 'video' && selectedModel === 'stability');
+  const supportsImageReference = ['gpt4o', 'recraft', 'kling', 'runway'].includes(selectedModel) || 
+    (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'pika' || selectedModel === 'luma'));
 
   // Get image upload message based on art mode
   const getImageUploadMessage = () => {
@@ -297,6 +297,15 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
     }
     if (mode === 'video' && selectedModel === 'stability') {
       return 'Upload a reference image for video generation';
+    }
+    if (mode === 'video' && selectedModel === 'runway') {
+      return 'Upload a reference image for video generation (optional)';
+    }
+    if (mode === 'video' && selectedModel === 'pika') {
+      return 'Upload a reference image for video generation (optional)';
+    }
+    if (mode === 'video' && selectedModel === 'luma') {
+      return 'Upload a reference image for video generation (optional)';
     }
     return 'Upload a reference image (optional)';
   };
@@ -324,12 +333,6 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
 
       if (mode === 'video' && videoMode === 'image' && !selectedImage) {
         setApiError('Please upload an image');
-        return;
-      }
-
-      // Remove the image requirement check for Runway since it's text-to-video
-      if (mode === 'video' && selectedModel === 'skyreels' && !selectedImage) {
-        setApiError(`Please upload an image for ${selectedModel} video generation`);
         return;
       }
 
@@ -366,18 +369,18 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
       // Only optimize prompt if there are presets or slider adjustments
       let optimizedPrompt = currentPrompt;
       if (presetTexts.length > 0 || sliderAdjustments.length > 0) {
-      // Log the complete prompt being sent
-      console.log('Sending to ChatGPT:', {
-        model: selectedModel,
-        prompt: currentPrompt,
-        presets: presetTexts,
-        sliderAdjustments,
+        // Log the complete prompt being sent
+        console.log('Sending to ChatGPT:', {
+          model: selectedModel,
+          prompt: currentPrompt,
+          presets: presetTexts,
+          sliderAdjustments,
           negativePrompt,
           hasImage: !!selectedImage
-      });
+        });
 
-      // Construct the prompt for ChatGPT
-      const chatGptPrompt = `Generate ${mode === 'video' ? 'a video' : 'an image'} with the following specifications:
+        // Construct the prompt for ChatGPT
+        const chatGptPrompt = `Generate ${mode === 'video' ? 'a video' : 'an image'} with the following specifications:
 Model: ${selectedModel}
 ${presetTexts.length > 0 ? `Presets: ${presetTexts.join(', ')}\n` : ''}
 ${sliderAdjustments.length > 0 ? `Adjustments: ${sliderAdjustments.join(', ')}\n` : ''}
@@ -386,26 +389,26 @@ User prompt: ${currentPrompt}
 
 Please provide a detailed analysis of how these specifications will affect the generated ${mode === 'video' ? 'video' : 'image'}.`;
 
-      // Get optimized prompt from ChatGPT
-      const chatGptResponse = await sendChatMessage([
-        { role: 'user', content: chatGptPrompt }
-      ], true, selectedModel, mode, selectedArtMode);
+        // Get optimized prompt from ChatGPT
+        const chatGptResponse = await sendChatMessage([
+          { role: 'user', content: chatGptPrompt }
+        ], true, selectedModel, mode, selectedArtMode);
 
-      if (!chatGptResponse.response) {
-        throw new Error('Failed to get optimized prompt from ChatGPT');
-      }
+        if (!chatGptResponse.response) {
+          throw new Error('Failed to get optimized prompt from ChatGPT');
+        }
 
-      // Extract just the optimized prompt from the response
+        // Extract just the optimized prompt from the response
         optimizedPrompt = chatGptResponse.response;
       
-      // If the response is JSON, try to extract the optimizedPrompt field
-      try {
-        const parsedResponse = JSON.parse(chatGptResponse.response);
-        if (parsedResponse.optimizedPrompt) {
-          optimizedPrompt = parsedResponse.optimizedPrompt;
-        }
-      } catch (e) {
-        // If parsing fails, use the response as is
+        // If the response is JSON, try to extract the optimizedPrompt field
+        try {
+          const parsedResponse = JSON.parse(chatGptResponse.response);
+          if (parsedResponse.optimizedPrompt) {
+            optimizedPrompt = parsedResponse.optimizedPrompt;
+          }
+        } catch (e) {
+          // If parsing fails, use the response as is
         }
       }
 
@@ -488,7 +491,7 @@ Please provide a detailed analysis of how these specifications will affect the g
           statusText: response.statusText,
           data: data
         });
-        throw new Error(data.error || `Failed to generate ${mode}`);
+        throw new Error(data.error || data.details || `Failed to generate ${mode}`);
       }
 
       if (data.error) {
@@ -500,28 +503,34 @@ Please provide a detailed analysis of how these specifications will affect the g
         // For PIAPI-based models, we need to poll for the result
         if (data.taskId) {
           let videoData;
-        let attempts = 0;
-        const maxAttempts = 60; // 5 minutes with 5-second intervals
+          let attempts = 0;
+          const maxAttempts = 60; // 5 minutes with 5-second intervals
           
           while (attempts < maxAttempts) {
             const statusResponse = await fetch(`/api/video-status?taskId=${data.taskId}`);
-          const statusData = await statusResponse.json();
+            const statusData = await statusResponse.json();
 
-          if (!statusResponse.ok) {
-              throw new Error(statusData.error || 'Failed to check video status');
-          }
+            if (!statusResponse.ok) {
+              console.error('Video status check failed:', {
+                status: statusResponse.status,
+                statusText: statusResponse.statusText,
+                data: statusData
+              });
+              throw new Error(statusData.error || statusData.details || 'Failed to check video status');
+            }
 
             if (statusData.status === 'completed' && statusData.videoUrl) {
               videoData = statusData;
               break;
-          }
+            }
 
-          if (statusData.status === 'failed') {
-              throw new Error('Video generation failed');
-          }
+            if (statusData.status === 'failed') {
+              console.error('Video generation failed:', statusData);
+              throw new Error(statusData.error || statusData.details || 'Video generation failed');
+            }
 
             await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-          attempts++;
+            attempts++;
           }
           
           if (!videoData?.videoUrl) {
@@ -570,22 +579,22 @@ Please provide a detailed analysis of how these specifications will affect the g
           console.error('No video URL in response:', data);
           throw new Error('No video URL received from server');
         }
-        } else {
-          if (!data.imageUrl) {
-            console.error('No image URL in response:', data);
-            throw new Error('No image URL received from server');
-          }
+      } else {
+        if (!data.imageUrl) {
+          console.error('No image URL in response:', data);
+          throw new Error('No image URL received from server');
+        }
 
-          // Add the generated image to the gallery
-          onAddToGallery({
-            id: data.imageId,
-            url: data.imageUrl,
-            prompt: optimizedPrompt,
-            negativePrompt: data.negativePrompt,
-            model: data.model,
-            createdAt: new Date().toISOString(),
-            type: 'image'
-          });
+        // Add the generated image to the gallery
+        onAddToGallery({
+          id: data.imageId,
+          url: data.imageUrl,
+          prompt: optimizedPrompt,
+          negativePrompt: data.negativePrompt,
+          model: data.model,
+          createdAt: new Date().toISOString(),
+          type: 'image'
+        });
       }
 
       // Clear the uploaded image after successful generation
@@ -614,7 +623,7 @@ Please provide a detailed analysis of how these specifications will affect the g
   return (
     <div className="space-y-4">
       {/* Image Upload Section */}
-      {(mode === 'image' || (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'kling'))) && supportsImageReference && selectedModel !== 'ideogram' && (
+      {(mode === 'image' || (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'kling' || selectedModel === 'runway' || selectedModel === 'pika' || selectedModel === 'luma'))) && supportsImageReference && selectedModel !== 'ideogram' && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
