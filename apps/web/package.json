@@ -30,6 +30,8 @@
   },
   "devDependencies": {
     "@tailwindcss/nesting": "0.0.0-insiders.565cd3e",
+    "@types/react": "19.1.0",
+    "@types/react-dom": "19.1.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.31",
     "tailwind-scrollbar": "^4.0.2",
