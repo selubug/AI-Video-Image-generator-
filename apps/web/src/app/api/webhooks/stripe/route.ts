@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       return new NextResponse('Error updating subscription', { status: 500 });
     }
 
-    // Update users table with new daily limit
+    // Update users table with new daily limit and subscription_plan
     const { error: userError } = await supabase
       .from('users')
       .upsert({
@@ -63,6 +63,7 @@ export async function POST(req: Request) {
           ? plan.features.imageGens 
           : 999999, // For unlimited plans
         last_reset_date: new Date().toISOString(),
+        subscription_plan: plan.id,
       });
 
     if (userError) {
@@ -107,6 +108,7 @@ export async function POST(req: Request) {
           id: subscription.metadata.userId,
           daily_image_gens: 5, // Free plan limit
           last_reset_date: new Date().toISOString(),
+          subscription_plan: 'free',
         });
 
       if (userError) {
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
         return new NextResponse('Error resetting user limits', { status: 500 });
       }
     } else {
-      // Update users table with new daily limit
+      // Update users table with new daily limit and subscription_plan
       const { error: userError } = await supabase
         .from('users')
         .upsert({
@@ -123,6 +125,7 @@ export async function POST(req: Request) {
             ? plan.features.imageGens 
             : 999999, // For unlimited plans
           last_reset_date: new Date().toISOString(),
+          subscription_plan: plan.id,
         });
 
       if (userError) {

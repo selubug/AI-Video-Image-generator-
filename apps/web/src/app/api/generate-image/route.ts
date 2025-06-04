@@ -65,11 +65,30 @@ export async function POST(req: Request) {
       try {
         console.log('Calling DALL-E 3 API with prompt:', prompt);
         
+        // Get aspect ratio from form data or default to 1:1
+        const aspectRatio = formData.get('aspect_ratio') as string || '1:1';
+        
+        // Map aspect ratio to DALL-E 3 size
+        let size: '1024x1024' | '1024x1792' | '1792x1024';
+        switch (aspectRatio) {
+          case '1:1':
+            size = '1024x1024';
+            break;
+          case '9:16':
+            size = '1024x1792';
+            break;
+          case '16:9':
+            size = '1792x1024';
+            break;
+          default:
+            size = '1024x1024';
+        }
+        
         const response = await openai.images.generate({
           model: 'dall-e-3',
           prompt: prompt,
           n: 1,
-          size: '1024x1024',
+          size: size,
           quality: 'standard',
           style: 'natural'
         });
@@ -101,57 +120,110 @@ export async function POST(req: Request) {
         );
       }
     } else if (model === 'stable-diffusion-xl') {
-      if (!process.env.STABILITY_API_KEY) {
-        console.error('Stability API key is missing');
+      if (!process.env.API_302_KEY) {
+        console.error('302 API key is missing');
         return NextResponse.json(
-          { error: 'Stability API key is missing' },
+          { error: '302 API key is missing' },
           { status: 500 }
         );
       }
 
       try {
-        console.log('Calling Stable Diffusion 3.5 Large API with prompt:', prompt);
+        console.log('Calling Stable Diffusion XL API with prompt:', prompt);
+        
+        // Get aspect ratio from form data or default to 1:1
+        const aspectRatio = formData.get('aspect_ratio') as string || '1:1';
+        
+        // Map aspect ratio to dimensions
+        let width = 1024;
+        let height = 1024;
+        switch (aspectRatio) {
+          case '16:9':
+            width = 1344;
+            height = 768;
+            break;
+          case '9:16':
+            width = 768;
+            height = 1344;
+            break;
+          default: // 1:1
+            width = 1024;
+            height = 1024;
+        }
+        
+        console.log('Using dimensions:', { width, height, aspectRatio });
         
         const requestBody = {
-          prompt: prompt,
-            height: 1024,
-            width: 1024,
-          cfg_scale: 4.5,
-          steps: 30
+          text_prompts: [
+            {
+              text: prompt,
+              weight: 1
+            },
+            {
+              text: negativePrompt || "blurry, low quality, distorted, ugly, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body",
+              weight: -1
+            }
+          ],
+          height: height,
+          width: width
         };
 
-        console.log('Sending request to Stability AI API:', requestBody);
+        console.log('Sending request to 302.ai Stable Diffusion API:', requestBody);
 
-        const response = await fetch('https://api.stability.ai/v2beta/stable-image/generate/sd3.5-large', {
+        const response = await fetch('https://api.302.ai/sd/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.STABILITY_API_KEY}`
+            'Accept': 'image/png',
+            'Authorization': `Bearer ${process.env.API_302_KEY}`
           },
           body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
-          const errorData = await response.json();
-          console.error('Stability AI API error:', errorData);
-          throw new Error(`Stability AI API error: ${errorData.error || 'Unknown error'}`);
+          const errorText = await response.text();
+          console.error('Stable Diffusion API error:', errorText);
+          throw new Error(`Stable Diffusion API error: ${errorText}`);
         }
 
-        const data = await response.json();
-        console.log('Stability AI API response:', data);
-
-        if (!data.artifacts || data.artifacts.length === 0) {
-          throw new Error('No images returned from Stability AI API');
-        }
-
-        // The response includes the base64 image directly
-        imageUrl = `data:image/png;base64,${data.artifacts[0].base64}`;
+        // The response is an image buffer
+        const imageBuffer = await response.arrayBuffer();
+        const base64Image = Buffer.from(imageBuffer).toString('base64');
+        imageUrl = `data:image/png;base64,${base64Image}`;
         
-        console.log('Successfully generated image with Stable Diffusion 3.5 Large');
+        console.log('Successfully generated image with Stable Diffusion XL');
+
+        // Store metadata in database
+        const { error: dbError } = await supabase
+          .from('generated_images')
+          .insert({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            prompt: prompt,
+            negative_prompt: negativePrompt || null,
+            model: 'stable-diffusion-xl',
+            image_url: imageUrl,
+            created_at: new Date().toISOString(),
+            type: 'image',
+            resolution: `${width}x${height}`
+          });
+
+        if (dbError) {
+          console.error('Error storing in database:', dbError);
+          throw new Error(`Failed to store image metadata: ${dbError.message}`);
+        }
+
+        return NextResponse.json({
+          imageUrl,
+          imageId: crypto.randomUUID(),
+          prompt,
+          negativePrompt,
+          model: 'stable-diffusion-xl'
+        });
       } catch (error) {
-        console.error('Stability AI API error:', error);
+        console.error('Stable Diffusion API error:', error);
         return NextResponse.json(
-          { error: 'Failed to generate image with Stable Diffusion 3.5 Large: ' + (error as Error).message },
+          { error: 'Failed to generate image with Stable Diffusion XL: ' + (error as Error).message },
           { status: 500 }
         );
       }
@@ -167,6 +239,10 @@ export async function POST(req: Request) {
       try {
         console.log('Calling GPT Image 1 API with prompt:', prompt);
         
+        // GPT4O only supports square images, so we'll use 1024x1024
+        const size = '1024x1024';
+        console.log('Using size for GPT4O:', { size });
+        
         let response;
         if (image) {
           // If there's a reference image, use the edits endpoint
@@ -174,12 +250,12 @@ export async function POST(req: Request) {
           
           console.log('Using image reference with edits endpoint');
           response = await openai.images.edit({
-          model: 'gpt-image-1',
-          prompt: prompt,
+            model: 'gpt-image-1',
+            prompt: prompt,
             image: new File([imageBuffer], 'image.png', { type: 'image/png' }),
-          size: '1024x1024',
+            size: size,
             n: 1
-        });
+          });
 
           console.log('GPT Image 1 edits API response:', response);
         
@@ -188,7 +264,7 @@ export async function POST(req: Request) {
           if (!base64ImageData) {
             console.error('No base64 image data in response:', response);
             throw new Error('No image data returned from GPT Image 1');
-        }
+          }
 
           // Convert to data URL
           imageUrl = `data:image/png;base64,${base64ImageData}`;
@@ -199,23 +275,51 @@ export async function POST(req: Request) {
           model: 'gpt-image-1',
           prompt: prompt,
           n: 1,
-            size: '1024x1024'
-          });
+            size: size
+        });
 
           console.log('GPT Image 1 generate API response:', response);
-          
+        
           // Get the base64 image data directly from the response
           const base64ImageData = response.data?.[0]?.b64_json;
           if (!base64ImageData) {
             console.error('No base64 image data in response:', response);
             throw new Error('No image data returned from GPT Image 1');
-          }
+        }
 
           // Convert to data URL
           imageUrl = `data:image/png;base64,${base64ImageData}`;
         }
         
         console.log('Successfully processed GPT Image 1 image');
+
+        // Store metadata in database
+        const { error: dbError } = await supabase
+          .from('generated_images')
+          .insert({
+            id: crypto.randomUUID(),
+            user_id: userId,
+            prompt: prompt,
+            negative_prompt: negativePrompt || null,
+            model: 'gpt4o',
+            image_url: imageUrl,
+            created_at: new Date().toISOString(),
+            type: 'image',
+            resolution: size
+          });
+
+        if (dbError) {
+          console.error('Error storing in database:', dbError);
+          throw new Error(`Failed to store image metadata: ${dbError.message}`);
+        }
+
+        return NextResponse.json({
+          imageUrl,
+          imageId: crypto.randomUUID(),
+          prompt,
+          negativePrompt,
+          model: 'gpt4o'
+        });
       } catch (error) {
         console.error('GPT Image 1 API error:', error);
         const errorMessage = (error as Error).message;
@@ -245,12 +349,24 @@ export async function POST(req: Request) {
       try {
         console.log('Calling Midjourney API with prompt:', prompt);
         
+        // Get aspect ratio from form data or default to 1:1
+        const aspectRatio = formData.get('aspect_ratio') as string || '1:1';
+        
+        // Validate aspect ratio
+        const validAspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+        if (!validAspectRatios.includes(aspectRatio)) {
+          return NextResponse.json(
+            { error: 'Invalid aspect ratio. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4' },
+            { status: 400 }
+          );
+        }
+        
         const requestBody = {
           model: 'midjourney',
           task_type: 'imagine',
           input: {
             prompt: prompt,
-            aspect_ratio: '1:1',
+            aspect_ratio: aspectRatio,
             process_mode: 'turbo',
             skip_prompt_check: false
           },
@@ -528,16 +644,26 @@ export async function POST(req: Request) {
       try {
         console.log('Calling Ideogram API with prompt:', prompt);
         
-        // Get aspect ratio from form data or default to 16:9
-        // Convert from 16:9 format to ASPECT_16_9 format for Ideogram
-        const rawAspectRatio = formData.get('aspect_ratio') as string || '16:9';
+        // Get aspect ratio from form data or default to 1:1
+        const rawAspectRatio = formData.get('aspect_ratio') as string || '1:1';
+        
+        // Validate aspect ratio
+        const validAspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+        if (!validAspectRatios.includes(rawAspectRatio)) {
+          return NextResponse.json(
+            { error: 'Invalid aspect ratio. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4' },
+            { status: 400 }
+          );
+        }
+        
+        // Convert from frontend format to Ideogram API format
         const aspectRatio = `ASPECT_${rawAspectRatio.replace(':', '_')}`;
         
         // Make the request
         const requestBody = {
           image_request: {
             prompt: prompt,
-            negative_prompt: negativePrompt || "blurry, low quality, distorted, ugly, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body, distorted, ugly, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body",
+            negative_prompt: negativePrompt || "blurry, low quality, distorted, ugly, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body",
             aspect_ratio: aspectRatio,
             style: "cinematic",
             cfg_scale: 7.5,
@@ -592,7 +718,7 @@ export async function POST(req: Request) {
           console.error('Error storing in database:', dbError);
           throw new Error(`Failed to store image metadata: ${dbError.message}`);
         }
-
+        
         console.log('Successfully generated and stored image with Ideogram');
         return NextResponse.json({
           imageUrl,
@@ -620,6 +746,38 @@ export async function POST(req: Request) {
       try {
         console.log('Calling Recraft API with prompt:', prompt);
         
+        // Get aspect ratio from form data or default to 1:1
+        const aspectRatio = formData.get('aspect_ratio') as string || '1:1';
+        
+        // Validate aspect ratio
+        const validAspectRatios = ['1:1', '16:9', '9:16'];
+        if (!validAspectRatios.includes(aspectRatio)) {
+          return NextResponse.json(
+            { error: 'Invalid aspect ratio. Must be one of: 1:1, 16:9, 9:16' },
+            { status: 400 }
+          );
+        }
+        
+        // Map aspect ratio to dimensions
+        // Recraft works best with multiples of 64
+        let width = 1024;
+        let height = 1024;
+        switch (aspectRatio) {
+          case '16:9':
+            width = 1024;
+            height = 576;  // 1024 * 9/16 = 576
+            break;
+          case '9:16':
+            width = 576;   // 1024 * 9/16 = 576
+            height = 1024;
+            break;
+          default: // 1:1
+            width = 1024;
+            height = 1024;
+        }
+        
+        console.log('Using dimensions for Recraft:', { width, height, aspectRatio });
+        
         // If there's a reference image, use the imageToImage endpoint
         if (image) {
           // Convert image to File with proper name and type
@@ -632,8 +790,10 @@ export async function POST(req: Request) {
           formData.append('image', file);
           formData.append('style', 'realistic_image');
           formData.append('strength', '0.6');
+          formData.append('width', width.toString());
+          formData.append('height', height.toString());
 
-          console.log('Sending request to Recraft imageToImage API');
+          console.log('Sending request to Recraft imageToImage API with dimensions:', { width, height });
 
           const response = await fetch('https://external.api.recraft.ai/v1/images/imageToImage', {
             method: 'POST',
@@ -667,7 +827,7 @@ export async function POST(req: Request) {
           imageUrl = `data:image/png;base64,${base64Image}`;
         } else {
           // For text-to-image, use the generations endpoint
-          console.log('Sending request to Recraft generations API');
+          console.log('Sending request to Recraft generations API with dimensions:', { width, height });
 
         const response = await fetch('https://external.api.recraft.ai/v1/images/generations', {
           method: 'POST',
@@ -678,9 +838,11 @@ export async function POST(req: Request) {
             body: JSON.stringify({
               prompt: prompt,
               style: 'realistic_image',
-              width: 1024,
-              height: 1024,
-              num_images: 1
+              width: width,
+              height: height,
+              num_images: 1,
+              cfg_scale: 7.5,
+              steps: 30
             })
         });
 
@@ -720,16 +882,15 @@ export async function POST(req: Request) {
       if (!process.env.HUGGINGFACE_API_KEY) {
         console.error('Hugging Face API key is missing');
         return NextResponse.json(
-          { error: 'Hugging Face API key is missing' },
+          { error: 'Hugging Face API key is missing. Please check your .env.local file.' },
           { status: 500 }
         );
       }
 
       try {
-        console.log('Calling FLUX.1-dev API with prompt:', prompt);
+        console.log('Calling FLUX.1-dev API');
         
-        // Note: FLUX.1-dev doesn't support image-to-image via Hugging Face Inference API
-        // It only supports text-to-image generation
+        // Create the request body according to the FLUX.1-dev API spec
         const requestBody = {
           inputs: prompt,
           parameters: {
@@ -737,37 +898,106 @@ export async function POST(req: Request) {
             width: 1024,
             guidance_scale: 3.5,
             num_inference_steps: 50,
-            max_sequence_length: 512
+            max_sequence_length: 512,
+            seed: Math.floor(Math.random() * 1000000)
           }
         };
 
-        console.log('Sending request to FLUX.1-dev API:', requestBody);
+        console.log('Request body:', JSON.stringify(requestBody, null, 2));
 
         const response = await fetch('https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.HUGGINGFACE_API_KEY}`
+            'Authorization': `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify(requestBody)
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error('FLUX.1-dev API error:', errorData);
-          throw new Error(`FLUX.1-dev API error: ${errorData.error || 'Unknown error'}`);
+        const responseText = await response.text();
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          console.error('Failed to parse response:', responseText);
+          throw new Error('Invalid response from FLUX API');
         }
 
-        // The response is an image buffer
-        const imageBuffer = await response.arrayBuffer();
-        const base64Image = Buffer.from(imageBuffer).toString('base64');
-        imageUrl = `data:image/png;base64,${base64Image}`;
-        
-        console.log('Successfully generated image with FLUX.1-dev');
+        if (!response.ok || data.error) {
+          throw new Error(`FLUX API error: ${data.error || 'Unknown error'}`);
+        }
+
+        console.log('[FLUX.1-dev] raw response:', data);
+
+        if (!data[0]?.image) {
+          throw new Error('No image data returned from FLUX API');
+        }
+
+        const imageData = data[0].image;
+        const imageUrl = `data:image/jpeg;base64,${imageData}`;
+
+        // Store metadata in database
+        const dbData = {
+          id: crypto.randomUUID(),
+          user_id: userId,
+          prompt: prompt,
+          negative_prompt: negativePrompt || null,
+          model: 'flux-1-dev',
+          image_url: imageUrl,
+          created_at: new Date().toISOString(),
+          type: 'image',
+          resolution: '1024x1024'
+        };
+
+        console.log('Attempting to insert into database:', dbData);
+
+        const { error: dbError } = await supabase
+          .from('generated_images')
+          .insert(dbData);
+
+        if (dbError) {
+          console.error('Database error details:', {
+            error: dbError,
+            code: dbError.code,
+            message: dbError.message,
+            details: dbError.details,
+            hint: dbError.hint,
+            table: 'generated_images',
+            data: dbData
+          });
+          throw new Error(`Failed to store image metadata: ${dbError.message}`);
+        }
+
+        console.log('Successfully generated and stored image with FLUX.1-dev');
+        return NextResponse.json({
+          status: 'completed',
+          image_url: imageUrl,
+          metadata: {
+            model: 'flux-1-dev',
+            height: 1024,
+            width: 1024,
+            guidance_scale: 3.5,
+            num_inference_steps: 50,
+            max_sequence_length: 512
+          }
+        });
       } catch (error) {
-        console.error('FLUX.1-dev API error:', error);
+        console.error('FLUX API error:', error);
+        
+        // Check if it's a rate limit or service unavailable error
+        if (error instanceof Error && 
+            (error.message.includes('429') || error.message.includes('503'))) {
+          return NextResponse.json(
+            { 
+              error: 'FLUX service is currently at capacity. Please try again in a few minutes.',
+              details: 'The service is experiencing high demand. Your request will be processed when capacity becomes available.'
+            },
+            { status: 503 }
+          );
+        }
+        
         return NextResponse.json(
-          { error: 'Failed to generate image with FLUX.1-dev: ' + (error as Error).message },
+          { error: 'Failed to generate image with FLUX: ' + (error as Error).message },
           { status: 500 }
         );
       }
@@ -856,7 +1086,7 @@ export async function POST(req: Request) {
                 throw new Error('Insufficient balance in 302 AI wallet. Please top up credits or raise the daily limit.');
               } else if (data.error === "You don't have permission to access this model") {
                 throw new Error('No permission to access Imagen-3. Please check your API key permissions in the 302 dashboard.');
-              } else {
+    } else {
                 throw new Error(`302/Imagen-3 error: ${data.error}`);
               }
             }
@@ -940,7 +1170,7 @@ export async function POST(req: Request) {
           }
         } catch (error) {
           console.error('Google Imagen 4 API error:', error);
-          return NextResponse.json(
+      return NextResponse.json(
             { error: 'Failed to generate image with Google Imagen 4: ' + (error as Error).message },
             { status: 500 }
           );
@@ -973,14 +1203,14 @@ export async function POST(req: Request) {
         if (!validAspectRatios.includes(aspectRatio)) {
           return NextResponse.json(
             { error: 'Invalid aspect ratio. Must be one of: 16:9, 9:16' },
-            { status: 400 }
-          );
-        }
+        { status: 400 }
+      );
+    }
 
         // Validate duration
         const validDurations = ['5s', '6s', '7s', '8s'];
         if (!validDurations.includes(duration)) {
-          return NextResponse.json(
+      return NextResponse.json(
             { error: 'Invalid duration. Must be one of: 5s, 6s, 7s, 8s' },
             { status: 400 }
           );
@@ -1087,9 +1317,9 @@ export async function POST(req: Request) {
         console.error('302 API key is missing');
         return NextResponse.json(
           { error: '302 API key is missing' },
-          { status: 500 }
-        );
-      }
+        { status: 500 }
+      );
+    }
 
       try {
         console.log('Calling HiDream API with prompt:', prompt);
@@ -1097,22 +1327,41 @@ export async function POST(req: Request) {
         // Get aspect ratio from form data or default to 1:1
         const aspectRatio = formData.get('aspect_ratio') as string || '1:1';
         
-        // Convert aspect ratio to width and height
+        // Validate aspect ratio
+        const validAspectRatios = ['1:1', '16:9', '9:16', '4:3', '3:4'];
+        if (!validAspectRatios.includes(aspectRatio)) {
+          return NextResponse.json(
+            { error: 'Invalid aspect ratio. Must be one of: 1:1, 16:9, 9:16, 4:3, 3:4' },
+            { status: 400 }
+          );
+        }
+        
+        // Map aspect ratio to dimensions
         let width = 1024;
         let height = 1024;
-        if (aspectRatio === '16:9') {
-          width = 1024;
-          height = 576;
-        } else if (aspectRatio === '9:16') {
-          width = 576;
-          height = 1024;
-        } else if (aspectRatio === '4:3') {
-          width = 1024;
-          height = 768;
-        } else if (aspectRatio === '3:4') {
-          width = 768;
-          height = 1024;
+        switch (aspectRatio) {
+          case '16:9':
+            width = 1024;
+            height = 576;
+            break;
+          case '9:16':
+            width = 576;
+            height = 1024;
+            break;
+          case '4:3':
+            width = 1024;
+            height = 768;
+            break;
+          case '3:4':
+            width = 768;
+            height = 1024;
+            break;
+          default: // 1:1
+            width = 1024;
+            height = 1024;
         }
+        
+        console.log('Using dimensions for HiDream:', { width, height, aspectRatio });
         
         // Make the request
         const requestBody = {
@@ -1163,12 +1412,12 @@ export async function POST(req: Request) {
           .from('generated_images')
           .insert({
             id: crypto.randomUUID(),
-            user_id: userId,
-            prompt: prompt,
-            negative_prompt: negativePrompt || null,
+        user_id: userId,
+        prompt: prompt,
+        negative_prompt: negativePrompt || null,
             model: 'hidream',
-            image_url: imageUrl,
-            created_at: new Date().toISOString(),
+        image_url: imageUrl,
+        created_at: new Date().toISOString(),
             type: 'image',
             resolution: `${width}x${height}`
           });
@@ -1205,24 +1454,14 @@ export async function POST(req: Request) {
       try {
         console.log('Calling Kling API with prompt:', prompt);
         
-        // Get aspect ratio and duration from form data
+        // Get aspect ratio from form data or default to 16:9
         const aspectRatio = formData.get('aspect_ratio') as string || '16:9';
-        const duration = formData.get('duration') as string || '5';
         
         // Validate aspect ratio
         const validAspectRatios = ['16:9', '9:16', '1:1'];
         if (!validAspectRatios.includes(aspectRatio)) {
           return NextResponse.json(
             { error: 'Invalid aspect ratio. Must be one of: 16:9, 9:16, 1:1' },
-            { status: 400 }
-          );
-        }
-
-        // Validate duration
-        const validDurations = ['5', '10'];
-        if (!validDurations.includes(duration)) {
-          return NextResponse.json(
-            { error: 'Invalid duration. Must be one of: 5, 10' },
             { status: 400 }
           );
         }
@@ -1235,27 +1474,16 @@ export async function POST(req: Request) {
           const base64Image = Buffer.from(imageBuffer).toString('base64');
           imageUrl = `data:${image.type};base64,${base64Image}`;
         }
-        
+
         // Make the request
         const requestBody = {
-          model: 'kling',
-          task_type: 'video_generation',
+          model: "Kling",
+          task_type: "fast-txt2video",
           input: {
             prompt: prompt,
-            negative_prompt: negativePrompt || '',
-            cfg_scale: 0.5,
-            duration: parseInt(duration),
+            negative_prompt: negativePrompt || "blurry, low quality, distorted, ugly, bad anatomy, disfigured, poorly drawn face, mutation, mutated, extra limb, poorly drawn hands, missing limb, floating limbs, disconnected limbs, malformed hands, blur, out of focus, long neck, long body",
             aspect_ratio: aspectRatio,
-            mode: 'std',
-            version: '2.0',
-            ...(imageUrl && { image_url: imageUrl })
-          },
-          config: {
-            service_mode: 'public',
-            webhook_config: {
-              endpoint: '',
-              secret: ''
-            }
+            image_url: imageUrl
           }
         };
         console.log('Request body:', requestBody);
@@ -1276,7 +1504,7 @@ export async function POST(req: Request) {
         }
 
         const data = await response.json();
-        console.log('[PiAPI-Kling] raw response:', data);
+        console.log('[PIAPI-Kling] raw response:', data);
 
         if (data.code !== 200 || !data.data?.task_id) {
           throw new Error('No task ID returned from Kling API');
@@ -1296,25 +1524,30 @@ export async function POST(req: Request) {
           try {
             const statusResponse = await fetch(`https://api.piapi.ai/api/v1/task/${data.data.task_id}`, {
               headers: {
+                'Content-Type': 'application/json',
                 'X-API-KEY': process.env.PIAPI_API_KEY
               }
             });
 
             if (!statusResponse.ok) {
-              console.error('Error checking task status:', await statusResponse.text());
+              const errorText = await statusResponse.text();
+              console.error('Error checking task status:', errorText);
               continue;
             }
 
             const statusData = await statusResponse.json();
             console.log('Status response:', statusData);
 
-            if (statusData.data?.status === 'completed' && statusData.data?.output?.video_url) {
-              result = statusData;
+            // Check for completed status and video URL
+            if (statusData.code === 200 && 
+                statusData.data?.status === 'completed' && 
+                statusData.data?.output?.video_url) {
+              result = statusData.data;
               break;
             }
 
             if (statusData.data?.status === 'failed') {
-              throw new Error(`Task failed: ${statusData.data?.error?.message || 'Unknown error'}`);
+              throw new Error(`Task failed: ${statusData.data.error?.message || 'Unknown error'}`);
             }
           } catch (error) {
             console.error('Error during status check:', error);
@@ -1322,20 +1555,11 @@ export async function POST(req: Request) {
           }
         }
 
-        if (!result?.data?.output?.video_url) {
+        if (!result?.output?.video_url) {
           throw new Error('Video generation timed out or failed');
         }
 
-        // Download the video
-        console.log('Downloading video from:', result.data.output.video_url);
-        const videoResponse = await fetch(result.data.output.video_url);
-        if (!videoResponse.ok) {
-          throw new Error('Failed to download generated video');
-        }
-
-        const videoBuffer = await videoResponse.arrayBuffer();
-        const base64Video = Buffer.from(videoBuffer).toString('base64');
-        imageUrl = `data:video/mp4;base64,${base64Video}`;
+        const videoUrl = result.output.video_url;
 
         // Store metadata in database
         const { error: dbError } = await supabase
@@ -1346,10 +1570,14 @@ export async function POST(req: Request) {
             prompt: prompt,
             negative_prompt: negativePrompt || null,
             model: 'kling',
-            image_url: imageUrl,
+            image_url: videoUrl,
             created_at: new Date().toISOString(),
             type: 'video',
-            resolution: aspectRatio === '16:9' ? '1920x1080' : aspectRatio === '9:16' ? '1080x1920' : '1080x1080'
+            duration: 5, // Default duration for fast mode
+            resolution: aspectRatio === '16:9' ? '1024x576' : 
+                       aspectRatio === '9:16' ? '576x1024' : 
+                       '1024x1024', // 1:1
+            fps: 30
           });
 
         if (dbError) {
@@ -1359,11 +1587,17 @@ export async function POST(req: Request) {
 
         console.log('Successfully generated and stored video with Kling');
         return NextResponse.json({
-          imageUrl,
-          imageId: crypto.randomUUID(),
-          prompt,
-          negativePrompt,
-          model: 'kling'
+          status: 'completed',
+          video_url: videoUrl,
+          metadata: {
+            model: 'kling',
+            task_id: data.data.task_id,
+            aspect_ratio: aspectRatio,
+            duration: 5,
+            resolution: aspectRatio === '16:9' ? '1024x576' : 
+                       aspectRatio === '9:16' ? '576x1024' : 
+                       '1024x1024' // 1:1
+          }
         });
       } catch (error) {
         console.error('Kling API error:', error);
@@ -1404,19 +1638,14 @@ export async function POST(req: Request) {
       };
 
           try {
-            const { data: savedData, error: dbError } = await supabase
+        const { data: savedData, error: dbError } = await supabase
           .from('generated_images')
-              .insert(imageData)
-              .select()
-              .single();
+          .insert(imageData)
+          .select()
+          .single();
 
-            if (dbError) {
-              console.error(`Database insert error for image ${index + 1}:`, {
-                code: dbError.code,
-                message: dbError.message,
-                details: dbError.details,
-                hint: dbError.hint
-              });
+        if (dbError) {
+              console.error(`Database insert error for image ${index + 1}:`, dbError);
               return null;
             }
 
@@ -1461,7 +1690,7 @@ export async function POST(req: Request) {
             details: dbError.details,
             hint: dbError.hint
           });
-          } else {
+        } else {
         console.log('Database insert successful:', {
           savedId: savedData?.id,
           savedUserId: savedData?.user_id,

@@ -11,6 +11,7 @@ interface ImageGalleryProps {
 
 const INITIAL_BATCH_SIZE = 12;
 const SCROLL_BATCH_SIZE = 24;
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjIwMCIgaGVpZ2h0PSIyMDAiIGZpbGw9IiNFNUU3RUIiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzZCNzI4MCIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTYiPkltYWdlIE5vdCBBdmFpbGFibGU8L3RleHQ+PC9zdmc+';
 
 export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) => {
   const [selectedImage, setSelectedImage] = useState<Image | null>(null);
@@ -415,6 +416,11 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
     }
   };
 
+  const handleImageError = (image: Image) => {
+    console.error('Image load error:', { url: image.url, id: image.id });
+    // You might want to implement retry logic or update the UI state here
+  };
+
   // --- JSX Rendering ---
 
   if (displayImages.length === 0 && !isLoadingMore && allImages.length === 0) { // More precise condition
@@ -461,6 +467,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
                                 muted
                                 playsInline
                                 poster="/placeholder-video.svg"
+                                preload="metadata"
                                 onError={(e) => {
                                     const videoElement = e.target as HTMLVideoElement;
                                     console.error('Video load error:', { 
@@ -470,11 +477,27 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
                                         networkState: videoElement.networkState,
                                         readyState: videoElement.readyState
                                     });
-                                    videoElement.classList.add('video-error');
+                                    // Add retry logic for video loading
+                                    const retryVideo = async () => {
+                                        try {
+                                            const response = await fetch(image.url, { method: 'HEAD' });
+                                            if (response.ok) {
+                                                videoElement.src = image.url;
+                                                videoElement.load();
+                                            } else {
+                                                setTimeout(retryVideo, 2000);
+                                            }
+                                        } catch (error) {
+                                            console.error('Video retry error:', error);
+                                            setTimeout(retryVideo, 2000);
+                                        }
+                                    };
+                                    retryVideo();
+                                    videoElement.classList.add('video-loading');
                                 }}
                                 onLoad={(e) => {
                                     const videoElement = e.target as HTMLVideoElement;
-                                    videoElement.classList.remove('video-error');
+                                    videoElement.classList.remove('video-error', 'video-loading');
                                     setLoadedImageCount(prev => prev + 1);
                                 }}
                             />
@@ -484,6 +507,10 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
                                         <path d="M8 5v14l11-7z"/>
                                     </svg>
                                 </div>
+                            </div>
+                            {/* Add loading indicator */}
+                            <div className="video-loading-indicator absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                             </div>
                         </div>
                     ) : (
@@ -495,7 +522,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
                             loading="lazy"
                             onError={(e) => {
                                 console.error('Image load error:', { url: image.url, id: image.id });
-                                (e.target as HTMLImageElement).src = '/placeholder-image.svg';
+                                (e.target as HTMLImageElement).src = PLACEHOLDER_IMAGE;
                                 (e.target as HTMLImageElement).classList.add('image-error');
                             }}
                             onLoad={(e) => {
@@ -577,6 +604,8 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
                                         loop
                                         muted
                                         playsInline
+                                        poster="/placeholder-video.svg"
+                                        preload="metadata"
                                     />
                                 ) : (
                                     <img
@@ -644,3 +673,29 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
     border: 1px dashed #ef4444; // Red dashed border
 }
 */
+
+// Add CSS styles at the end of the file
+const styles = `
+.video-loading {
+    opacity: 0.5;
+}
+
+.video-loading-indicator {
+    display: none;
+}
+
+.video-loading .video-loading-indicator {
+    display: flex;
+}
+
+.video-error {
+    opacity: 0.5;
+}
+`;
+
+// Add style tag to document head
+if (typeof document !== 'undefined') {
+    const styleTag = document.createElement('style');
+    styleTag.textContent = styles;
+    document.head.appendChild(styleTag);
+}

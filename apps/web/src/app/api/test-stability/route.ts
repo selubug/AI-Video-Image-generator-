@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 
 export async function GET() {
-  const taskId = 'runway_20a1913b29ff';
-  console.log('Testing Runway task:', taskId);
+  const taskId = '6950d4f138b95b1ccfa0761bbb4d2b18ab5118e23552e2d8ba140bd192137990';
+  console.log('Testing Stability AI task:', taskId);
 
   try {
-    const response = await fetch(`https://api.302.ai/runway/task/${taskId}/fetch`, {
+    const response = await fetch(`https://api.302.ai/sd/v2beta/image-to-video/result/${taskId}`, {
       headers: {
         'Accept': 'application/json',
         'Authorization': `Bearer ${process.env.API_302_KEY}`
@@ -22,18 +22,21 @@ export async function GET() {
     const data = await response.json();
     console.log('Raw response:', JSON.stringify(data, null, 2));
 
-    // Check for video URL in the response
-    const videoUrl = data.task?.artifacts?.[0]?.url;
+    // Check for video in the response
+    const videoData = data.video;
     
-    if (videoUrl) {
-      console.log('Found video URL:', videoUrl);
+    if (videoData) {
+      console.log('Found video data');
+      
+      // Convert base64 to video URL
+      const videoUrl = `data:video/mp4;base64,${videoData}`;
       
       // Save to database
       const dbData = {
         id: crypto.randomUUID(),
         user_id: '00000000-0000-0000-0000-000000000000',
-        prompt: data.task?.options?.text_prompt || 'Test video',
-        model: 'runway',
+        prompt: 'Test video',
+        model: 'stability',
         image_url: videoUrl,
         created_at: new Date().toISOString(),
         type: 'video',
@@ -67,8 +70,7 @@ export async function GET() {
 
     return NextResponse.json({
       status: 'pending',
-      message: 'No video URL found yet',
-      taskStatus: data.task?.status,
+      message: 'No video data found yet',
       rawResponse: data
     });
 

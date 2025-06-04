@@ -49,6 +49,31 @@ interface RunwayTaskResponse {
   error?: string;
 }
 
+interface RunwayResult {
+  video: string;
+  seed?: string;
+  aspect_ratio?: string;
+    duration?: number;
+  file_size?: number;
+  content_type?: string;
+}
+
+interface RunwayResponse {
+  state: string;
+  video?: string;
+  seed?: string;
+    aspect_ratio?: string;
+  duration?: number;
+  file_size?: number;
+  content_type?: string;
+  error?: string;
+  task?: {
+    status: string;
+    artifacts?: Array<{ url: string }>;
+    error?: string;
+  };
+}
+
 // Helper function to safely parse JSON
 function safeJSONParse<T>(str: string | null | undefined, defaultValue: T): T {
   if (!str) return defaultValue;
@@ -73,6 +98,25 @@ function validateFormData(formData: FormData): {
     const image = formData.get('image') as File;
   const optionsRaw = formData.get('options');
   const options = safeJSONParse<VideoOptions>(optionsRaw as string | null, {});
+
+  // Validate aspect ratio based on model
+  const validAspectRatios: { [key: string]: string[] } = {
+    'kling': ['16:9', '9:16', '1:1'],
+    'runway': ['16:9', '9:16', '1:1'],
+    'pika': ['16:9', '9:16', '1:1'],
+    'luma': ['16:9', '9:16', '1:1'],
+    'stability': ['16:9', '9:16', '1:1'],
+    'veo2': ['16:9', '9:16']
+  };
+
+  if (options.aspect_ratio && validAspectRatios[model]) {
+    if (!validAspectRatios[model].includes(options.aspect_ratio)) {
+      return {
+        isValid: false,
+        error: `Invalid aspect ratio for ${model}. Must be one of: ${validAspectRatios[model].join(', ')}`
+      };
+    }
+  }
 
   console.log('Validating form data:', {
     prompt: prompt ? 'present' : 'missing',
@@ -125,31 +169,34 @@ async function pollRunwayTask(taskId: string, isTurbo = false): Promise<string> 
       });
 
       if (!statusResponse.ok) {
-        const errorText = await statusResponse.text();
-        console.error('Error checking task status:', errorText);
+        console.error('Error checking task status:', await statusResponse.text());
         continue;
       }
 
       const statusData = await statusResponse.json();
       console.log('Status response:', statusData);
 
-      const task = statusData.task;
-      const artifact = task?.artifacts?.[0];
-
-      if (task?.status === 'SUCCEEDED' && artifact?.url) {
-        return artifact.url;
+      // Check if task has succeeded
+      if (statusData.task?.status === 'SUCCEEDED' && statusData.task?.artifacts?.[0]?.url) {
+        console.log('Task succeeded, returning video URL:', statusData.task.artifacts[0].url);
+        return statusData.task.artifacts[0].url;
       }
 
-      if (task?.status === 'FAILED') {
-        throw new Error(`Task failed: ${task.error || 'Runway task failed'}`);
+      // Check if task has failed
+      if (statusData.task?.status === 'FAILED') {
+        throw new Error(`Task failed: ${statusData.task.error || 'Unknown error'}`);
       }
+
+      // If still processing, continue polling
+      console.log('Task still processing, status:', statusData.task?.status);
     } catch (error) {
       console.error('Error during status check:', error);
+      // Continue polling even if there's an error
       continue;
     }
   }
 
-  throw new Error('Video generation timed out or failed');
+  throw new Error('Task timed out after 10 minutes');
 }
 
 export async function POST(request: Request) {
@@ -209,89 +256,88 @@ export async function POST(request: Request) {
     switch (model) {
       case 'kling': {
         console.log('=== Starting Kling Video Generation ===');
-        
         // If there's a reference image, upload it to a temporary URL first
         let imageUrl: string | undefined = undefined;
         if (image) {
-          console.log('Processing reference image...');
           try {
-            // Upload the image to temporary storage
-            console.log('Uploading image to temporary storage...');
             const uploadedUrl = await uploadImageToTempStorage(image);
-            if (!uploadedUrl) {
-              throw new Error('Failed to upload image to temporary storage');
-            }
+            if (!uploadedUrl) throw new Error('Failed to upload image to temporary storage');
             imageUrl = uploadedUrl;
-            console.log('Image uploaded successfully:', imageUrl);
-
-            // Verify the image URL is accessible
-            console.log('Verifying image URL accessibility...');
             const response = await fetch(imageUrl);
-            if (!response.ok) {
-              throw new Error(`Uploaded image is not accessible: ${response.status} ${response.statusText}`);
-            }
-            console.log('Image URL verified as accessible');
+            if (!response.ok) throw new Error(`Uploaded image is not accessible: ${response.status} ${response.statusText}`);
           } catch (error) {
-            console.error('Failed to process image:', error);
-            if (error instanceof Error) {
-              console.error('Error stack:', error.stack);
-            }
-        return NextResponse.json(
-              { error: 'Failed to process reference image: ' + (error as Error).message },
-              { status: 500 }
-            );
+            return NextResponse.json({ error: 'Failed to process reference image: ' + (error as Error).message }, { status: 500 });
           }
         }
-
-        console.log('Calling Kling API with parameters:', {
-        prompt,
-        negativePrompt,
-          duration: options?.duration || 5,
-          aspect_ratio: options?.aspect_ratio || '16:9',
-          has_image: !!imageUrl,
-          image_url: imageUrl ? 'present' : 'not present',
+        // Submit the Kling job
+        const klingResponse = await generateVideo(prompt, 'kling', {
+          negative_prompt: negativePrompt,
+          duration: (options?.duration || 5) as 5 | 10,
+          aspect_ratio: (options?.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1',
+          image_url: imageUrl,
           version: imageUrl ? '2.0' : '1.0'
         });
-
-        try {
-          const klingResponse = await generateVideo(prompt, 'kling', {
-            negative_prompt: negativePrompt,
-            duration: (options?.duration || 5) as 5 | 10,
-            aspect_ratio: (options?.aspect_ratio || '16:9') as '16:9' | '9:16' | '1:1',
-            image_url: imageUrl,
-            version: imageUrl ? '2.0' : '1.0'
-          });
-
-          if (!klingResponse.success) {
-            console.error('Kling generation failed:', klingResponse.error);
-            return NextResponse.json(
-              { 
-                error: klingResponse.error || 'Failed to generate video',
-                details: 'Kling API returned an error response'
-              },
-              { status: 500 }
-            );
-          }
-
-          console.log('Kling generation successful:', klingResponse.data);
-          return NextResponse.json({
-            ...klingResponse.data,
-        model: 'kling',
-            has_image: !!imageUrl
-          });
-        } catch (error) {
-          console.error('Unexpected error during Kling generation:', error);
-          if (error instanceof Error) {
-            console.error('Error stack:', error.stack);
-          }
-          return NextResponse.json(
-            { 
-              error: 'Failed to generate video with Kling',
-              details: error instanceof Error ? error.message : 'Unknown error'
-            },
-            { status: 500 }
-          );
+        if (!klingResponse.success || !klingResponse.data?.taskId) {
+          return NextResponse.json({ error: klingResponse.error || 'Failed to generate video', details: 'Kling API returned an error response' }, { status: 500 });
         }
+        // Poll for video completion
+        let attempts = 0;
+        const maxAttempts = 60; // 10 minutes with 10-second intervals
+        let videoUrl = null;
+        let duration = 5;
+        let resolution = '1024x576';
+        let status = '';
+        while (attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+          attempts++;
+          try {
+            const statusRes = await fetch(`https://api.piapi.ai/api/v1/task/${klingResponse.data.taskId}`, {
+              headers: { 'X-API-KEY': process.env.PIAPI_API_KEY! }
+            });
+            const statusData = await statusRes.json();
+            if (statusData.code !== 200) continue;
+            status = statusData.data.status;
+            if (status === 'completed' && statusData.data.output?.works?.[0]?.video) {
+              const video = statusData.data.output.works[0].video;
+              videoUrl = video.resource_without_watermark;
+              duration = video.duration;
+              resolution = `${video.width}x${video.height}`;
+              break;
+            }
+            if (status === 'failed') {
+              return NextResponse.json({ error: statusData.data.error || 'Kling video generation failed' }, { status: 500 });
+            }
+          } catch (err) {
+            continue;
+          }
+        }
+        if (!videoUrl) {
+          return NextResponse.json({ error: 'Video generation timed out or failed' }, { status: 500 });
+        }
+        // Store metadata in database
+        await supabase.from('generated_images').insert({
+          id: crypto.randomUUID(),
+          user_id: userId,
+          prompt,
+          negative_prompt: negativePrompt || null,
+          model: 'kling',
+          image_url: videoUrl,
+          created_at: new Date().toISOString(),
+          type: 'video',
+          duration,
+          resolution,
+          fps: 30
+        });
+        return NextResponse.json({
+          status: 'completed',
+          video_url: videoUrl,
+          metadata: {
+            model: 'kling',
+            task_id: klingResponse.data.taskId,
+            duration,
+            resolution
+          }
+        });
       }
 
       case 'hunyuan': {
@@ -370,7 +416,6 @@ export async function POST(request: Request) {
               const statusData = await statusResponse.json();
               console.log('Status response:', statusData);
 
-              // Check for completed status and video URL
               if (statusData.code === 200 && 
                   statusData.data?.status === 'completed' && 
                   statusData.data?.output?.video_url) {
@@ -556,16 +601,26 @@ export async function POST(request: Request) {
                 continue;
       }
 
-      const statusData = await statusResponse.json();
-              console.log('Status response:', statusData);
+      const statusData = await statusResponse.json() as RunwayResponse;
+              console.log('Status response:', JSON.stringify(statusData, null, 2));
 
-              if (statusData.status === 'COMPLETED' && statusData.video?.url) {
-                result = statusData;
+              // Check for both response formats
+              if (statusData.task?.status === 'SUCCEEDED' && statusData.task.artifacts?.[0]?.url) {
+                result = {
+                  video: statusData.task.artifacts[0].url
+                };
                 break;
               }
 
-              if (statusData.status === 'FAILED') {
-                throw new Error(`Task failed: ${statusData.error || 'Unknown error'}`);
+              if (statusData.state === 'SUCCEEDED' && statusData.video) {
+                result = {
+                  video: statusData.video
+                };
+                break;
+              }
+
+              if (statusData.task?.status === 'FAILED' || statusData.state === 'FAILED') {
+                throw new Error(`Task failed: ${statusData.task?.error || statusData.error || 'Unknown error'}`);
               }
             } catch (error) {
               console.error('Error during status check:', error);
@@ -573,13 +628,13 @@ export async function POST(request: Request) {
             }
           }
 
-          if (!result?.video?.url) {
+          if (!result?.video) {
             throw new Error('Video generation timed out or failed');
           }
 
           // Download the video
-          console.log('Downloading video from:', result.video.url);
-          const videoResponse = await fetch(result.video.url);
+          console.log('Downloading video from:', result.video);
+          const videoResponse = await fetch(result.video);
           if (!videoResponse.ok) {
             throw new Error('Failed to download generated video');
           }
@@ -599,7 +654,7 @@ export async function POST(request: Request) {
             .from('generations')
             .insert({
               user_id: userId,
-              prompt: prompt,
+          prompt: prompt,
               model: 'veo2',
               type: 'video',
               url: videoUrl,
@@ -631,7 +686,7 @@ export async function POST(request: Request) {
           });
         } catch (error) {
           console.error('Google Veo2 API error:', error);
-          return NextResponse.json(
+      return NextResponse.json(
             { error: 'Failed to generate video with Google Veo2: ' + (error as Error).message },
             { status: 500 }
           );
@@ -659,9 +714,9 @@ export async function POST(request: Request) {
           console.log('Request body:', requestBody);
 
           const response = await fetch('https://api.302.ai/minimaxi/v1/video_generation', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
               'Accept': 'application/json',
               'Authorization': `Bearer ${process.env.API_302_KEY}`
             },
@@ -683,7 +738,7 @@ export async function POST(request: Request) {
           }
 
           // Poll for the result
-          let attempts = 0;
+    let attempts = 0;
           const maxAttempts = 60; // 10 minutes with 10-second intervals
           let result;
 
@@ -695,13 +750,13 @@ export async function POST(request: Request) {
 
             try {
               const statusResponse = await fetch(`https://api.302.ai/minimaxi/v1/query/video_generation?task_id=${data.task_id}`, {
-                headers: {
+        headers: {
                   'Accept': 'application/json',
                   'Authorization': `Bearer ${process.env.API_302_KEY}`
                 }
-              });
+      });
 
-              if (!statusResponse.ok) {
+      if (!statusResponse.ok) {
                 const errorText = await statusResponse.text();
                 console.error('Error checking task status:', errorText);
                 
@@ -715,9 +770,9 @@ export async function POST(request: Request) {
                   continue;
                 }
                 continue;
-              }
+      }
 
-              const statusData = await statusResponse.json();
+      const statusData = await statusResponse.json();
               console.log('Status response:', statusData);
 
               // Check for quota limit in the response
@@ -814,7 +869,7 @@ export async function POST(request: Request) {
           throw new Error('Video generation timed out or failed');
         } catch (error) {
           console.error('Minimax API error:', error);
-          return NextResponse.json(
+      return NextResponse.json(
             { error: 'Failed to generate video with Minimax: ' + (error as Error).message },
             { status: 500 }
           );
@@ -849,7 +904,7 @@ export async function POST(request: Request) {
               apiFormData.append('negativePrompt', negativePrompt);
             }
             // Use cheapest option: 720p-5s
-            apiFormData.append('resolution', '720p');
+            apiFormData.append('resolution', options?.aspect_ratio === '9:16' ? '720p-vertical' : '720p');
             apiFormData.append('duration', '5');
 
             console.log('Making request to Pika image-to-video API...');
@@ -937,7 +992,7 @@ export async function POST(request: Request) {
               .insert({
                 id: crypto.randomUUID(),
                 user_id: userId,
-                prompt: prompt || 'Image-to-video generation',
+                prompt: prompt,
                 negative_prompt: negativePrompt || null,
                 model: 'pika',
                 image_url: videoUrl,
@@ -964,130 +1019,147 @@ export async function POST(request: Request) {
                 duration: 5
               }
             });
-          } else {
-            // Existing text-to-video code remains unchanged
-            console.log('Calling Pika text-to-video API with prompt:', prompt);
-            
-            const requestBody = {
-              promptText: prompt,
-              negativePrompt: negativePrompt || "blurry, low quality",
-              seed: Math.floor(Math.random() * 1000000) // Random seed
-            };
-            console.log('Request body:', requestBody);
+          }
 
-            const response = await fetch('https://api.302.ai/pika/generate/turbo/t2v', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${process.env.API_302_KEY}`
-              },
-              body: JSON.stringify(requestBody)
-            });
+          // Text-to-video generation
+          console.log('Calling Pika text-to-video API with prompt:', prompt);
+          
+          // Map aspect ratio to decimal values
+          const arMap = {
+            '16:9': 1.7778,
+            '9:16': 0.5625,
+            '1:1': 1.0
+          };
 
-            if (!response.ok) {
-              const errorText = await response.text();
-              console.error('Pika API error:', errorText);
-              throw new Error(`Pika API error: ${errorText}`);
-            }
+          // Build the JSON payload
+          const body = {
+            promptText: prompt,
+            seed: Math.floor(Math.random() * 1_000_000),
+            resolution: '720p', // cheapest option: 720p-5s (0.3 PTC/call)
+            duration: '5', // 5 seconds
+            aspectRatio: arMap[options?.aspect_ratio ?? '16:9']
+          };
 
-            const data = await response.json();
-            console.log('[302-Pika] raw response:', data);
+          // Add negative prompt only if it's one of the allowed Pikaffect words
+          const allowedNegativePrompts = ['Explode', 'Melt', 'Inflate', 'Squish', 'Cake-ify', 'Crush'];
+          if (negativePrompt && allowedNegativePrompts.includes(negativePrompt)) {
+            body.negativePrompt = negativePrompt;
+          }
 
-            if (!data.video_id) {
-              throw new Error('No video ID returned from Pika API');
-            }
+          console.log('Making request to Pika text-to-video API with body:', body);
+          const response = await fetch('https://api.302.ai/pika/generate/2.2/t2v', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.API_302_KEY}`
+            },
+            body: JSON.stringify(body)
+          });
 
-            // Poll for the result
-            let attempts = 0;
-            const maxAttempts = 60; // 10 minutes with 10-second intervals
-            let result;
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Pika API error:', errorText);
+            throw new Error(`Pika API error: ${errorText}`);
+          }
 
-            while (attempts < maxAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds between checks
-              attempts++;
+          const data = await response.json();
+          console.log('[302-Pika] raw response:', data);
 
-              console.log(`Polling attempt ${attempts}/${maxAttempts} for video ${data.video_id}`);
+          if (!data.video_id) {
+            throw new Error('No video ID returned from Pika API');
+          }
 
-              try {
-                const statusResponse = await fetch(`https://api.302.ai/pika/task/${data.video_id}/fetch`, {
-                  headers: {
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${process.env.API_302_KEY}`
-                  }
-                });
+          // Poll for the result
+          let attempts = 0;
+          const maxAttempts = 60; // 10 minutes with 10-second intervals
+          let result;
 
-                if (!statusResponse.ok) {
-                  const errorText = await statusResponse.text();
-                  console.error('Error checking task status:', errorText);
-                  continue;
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds between checks
+            attempts++;
+
+            console.log(`Polling attempt ${attempts}/${maxAttempts} for video ${data.video_id}`);
+
+            try {
+              const statusResponse = await fetch(`https://api.302.ai/pika/task/${data.video_id}/fetch`, {
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': `Bearer ${process.env.API_302_KEY}`
                 }
-
-                const statusData = await statusResponse.json();
-                console.log('Status response:', statusData);
-
-                if (statusData.status === 'finished' && statusData.url) {
-                  result = statusData;
-                  break;
-                }
-
-                if (statusData.status === 'failed') {
-                  throw new Error(`Task failed: ${statusData.error || 'Unknown error'}`);
-                }
-              } catch (error) {
-                console.error('Error during status check:', error);
-                continue;
-              }
-            }
-
-            if (!result?.url) {
-              throw new Error('Video generation timed out or failed');
-            }
-
-            // Download the video
-            console.log('Downloading video from:', result.url);
-            const videoResponse = await fetch(result.url);
-            if (!videoResponse.ok) {
-              throw new Error('Failed to download generated video');
-            }
-
-            const videoBuffer = await videoResponse.arrayBuffer();
-            const base64Video = Buffer.from(videoBuffer).toString('base64');
-            const videoUrl = `data:video/mp4;base64,${base64Video}`;
-
-            // Store metadata in database
-            const { error: dbError } = await supabase
-              .from('generated_images')
-              .insert({
-                id: crypto.randomUUID(),
-                user_id: userId,
-                prompt: prompt,
-                negative_prompt: negativePrompt || null,
-                model: 'pika',
-                image_url: videoUrl,
-                created_at: new Date().toISOString(),
-                type: 'video',
-                duration: 5,
-                resolution: '1024x576',
-                fps: 30
               });
 
-            if (dbError) {
-              console.error('Error storing in database:', dbError);
-              throw new Error(`Failed to store video metadata: ${dbError.message}`);
-            }
-
-            console.log('Successfully generated and stored video with Pika');
-            return NextResponse.json({
-              status: 'completed',
-              video_url: videoUrl,
-              metadata: {
-                model: 'turbo',
-                video_id: data.video_id,
-                seed: requestBody.seed
+              if (!statusResponse.ok) {
+                const errorText = await statusResponse.text();
+                console.error('Error checking task status:', errorText);
+                continue;
               }
-            });
+
+              const statusData = await statusResponse.json();
+              console.log('Status response:', statusData);
+
+              if (statusData.status === 'finished' && statusData.url) {
+                result = statusData;
+                break;
+              }
+
+              if (statusData.status === 'failed') {
+                throw new Error(`Task failed: ${statusData.error || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('Error during status check:', error);
+              continue;
+            }
           }
+
+          if (!result?.url) {
+            throw new Error('Video generation timed out or failed');
+          }
+
+          // Download the video
+          console.log('Downloading video from:', result.url);
+          const videoResponse = await fetch(result.url);
+          if (!videoResponse.ok) {
+            throw new Error('Failed to download generated video');
+          }
+
+          const videoBuffer = await videoResponse.arrayBuffer();
+          const base64Video = Buffer.from(videoBuffer).toString('base64');
+          const videoUrl = `data:video/mp4;base64,${base64Video}`;
+
+          // Store metadata in database
+          const { error: dbError } = await supabase
+            .from('generated_images')
+            .insert({
+              id: crypto.randomUUID(),
+              user_id: userId,
+              prompt: prompt,
+              negative_prompt: negativePrompt || null,
+              model: 'pika',
+              image_url: videoUrl,
+              created_at: new Date().toISOString(),
+              type: 'video',
+              duration: 5,
+              resolution: '1280x720', // 720p
+              fps: 30
+            });
+
+          if (dbError) {
+            console.error('Error storing in database:', dbError);
+            throw new Error(`Failed to store video metadata: ${dbError.message}`);
+          }
+
+          console.log('Successfully generated and stored video with Pika');
+          return NextResponse.json({
+            status: 'completed',
+            video_url: videoUrl,
+            metadata: {
+              model: 'pika-t2v',
+              video_id: data.video_id,
+              resolution: '720p',
+              duration: 5,
+              aspect_ratio: options?.aspect_ratio || '16:9'
+            }
+          });
         } catch (error) {
           console.error('Pika API error:', error);
           return NextResponse.json(
@@ -1122,11 +1194,23 @@ export async function POST(request: Request) {
           const cfgScale = parseFloat(formData.get('cfg_scale') as string) || 1.8;
           const motionBucketId = parseInt(formData.get('motion_bucket_id') as string) || 127;
 
-          // Resize image to required dimensions (1024x576)
+          // Get aspect ratio from form data or default to 16:9
+          const aspectRatio = formData.get('aspect_ratio') as string || '16:9';
+          
+          // Map aspect ratio to dimensions
+          const dimensions = {
+            '16:9': { width: 1024, height: 576 },
+            '9:16': { width: 576, height: 1024 },
+            '1:1': { width: 768, height: 768 }
+          };
+          
+          const { width, height } = dimensions[aspectRatio as keyof typeof dimensions];
+          console.log(`Using dimensions for ${aspectRatio}: ${width}x${height}`);
+          
           const imageBuffer = await inputImage.arrayBuffer();
           const sharp = require('sharp');
           const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
-            .resize(1024, 576, {
+            .resize(width, height, {
               fit: 'cover',
               position: 'center'
             })
@@ -1163,7 +1247,7 @@ export async function POST(request: Request) {
           // Poll for the result
           let attempts = 0;
           const maxAttempts = 60; // 10 minutes with 10-second intervals
-          let result;
+          let videoData;
 
           while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds between checks
@@ -1189,156 +1273,25 @@ export async function POST(request: Request) {
               console.log('Status response:', statusData);
 
               if (statusData.video) {
-                // We got the video data directly, process it
-                const videoBuffer = Buffer.from(statusData.video, 'base64');
-                const base64Video = videoBuffer.toString('base64');
-                const videoUrl = `data:video/mp4;base64,${base64Video}`;
-
-                // Store metadata in database
-                const { error: dbError } = await supabase
-                  .from('generated_images')
-                  .insert({
-                    id: crypto.randomUUID(),
-                    user_id: userId,
-                    prompt: prompt,
-                    negative_prompt: negativePrompt || null,
-                    model: 'stability',
-                    image_url: videoUrl,
-                    created_at: new Date().toISOString(),
-                    type: 'video',
-                    duration: 5,
-                    resolution: '1024x576',
-                    fps: 30
-                  });
-
-                if (dbError) {
-                  console.error('Error storing in database:', dbError);
-                  console.error('Database insert data:', {
-                    id: crypto.randomUUID(),
-                    user_id: userId,
-                    prompt: prompt,
-                    negative_prompt: negativePrompt || null,
-                    model: 'stability',
-                    image_url: videoUrl,
-                    created_at: new Date().toISOString(),
-                    type: 'video',
-                    duration: 5,
-                    resolution: '1024x576',
-                    fps: 30
-                  });
-                  throw new Error(`Failed to store video metadata: ${dbError.message}`);
-                }
-
-                console.log('Successfully generated and stored video with Stability AI');
-                return NextResponse.json({
-                  status: 'completed',
-                  video_url: videoUrl,
-                  metadata: {
-                    model: 'stability',
-                    generation_id: data.id,
-                    cfg_scale: cfgScale,
-                    motion_bucket_id: motionBucketId,
-                    seed: statusData.seed
-                  }
-                });
+                videoData = statusData.video;
+                break;
               }
 
-              if (statusData.status === 'failed') {
-                throw new Error(`Video generation failed: ${statusData.error || 'Unknown error'}`);
+              if (statusData.task?.status === 'FAILED') {
+                throw new Error(`Video generation failed: ${statusData.task.error || 'Unknown error'}`);
               }
-  } catch (error) {
+            } catch (error) {
               console.error('Error during status check:', error);
               continue;
             }
           }
 
-          throw new Error('Video generation timed out or failed');
-        } catch (error) {
-          console.error('Stability AI API error:', error);
-          return NextResponse.json(
-            { error: 'Failed to generate video with Stability AI: ' + (error as Error).message },
-            { status: 500 }
-          );
-        }
-      }
-
-      case 'runway': {
-        if (!process.env.API_302_KEY) {
-          console.error('302 API key is missing');
-          return NextResponse.json(
-            { error: '302 API key is missing' },
-            { status: 500 }
-          );
-        }
-
-        try {
-          console.log('Calling Runway Gen4 Turbo API');
-          
-          // Get duration from form data (default to 5 seconds)
-          const duration = parseInt(formData.get('duration') as string) || 5;
-          
-          // Check if we have an image for image-to-video generation
-          const image = formData.get('image') as File;
-          
-          if (!image) {
-            return NextResponse.json(
-              { error: 'Image is required for Runway Gen4 Turbo' },
-              { status: 400 }
-            );
+          if (!videoData) {
+            throw new Error('Video generation timed out or failed');
           }
 
-          console.log('Processing image for Runway Gen4 Turbo...');
-          
-          // Resize image to required dimensions (1280x768 for 16:9)
-          console.log('Resizing image to 1280x768...');
-          const imageBuffer = await image.arrayBuffer();
-          const sharp = require('sharp');
-          const resizedImageBuffer = await sharp(Buffer.from(imageBuffer))
-            .resize(1280, 768, {
-              fit: 'cover',
-              position: 'center'
-            })
-            .toBuffer();
-          
-          // Create form data for the request
-          const apiFormData = new FormData();
-          apiFormData.append('init_image', new Blob([resizedImageBuffer], { type: image.type }));
-          apiFormData.append('text_prompt', prompt);
-          apiFormData.append('seconds', duration.toString());
-          apiFormData.append('seed', Math.floor(Math.random() * 1000000).toString());
-
-          console.log('Making request to Runway Gen4 Turbo API...');
-          const response = await fetch('https://api.302.ai/runway_gen4_turbo/submit', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.API_302_KEY}`
-            },
-            body: apiFormData
-          });
-
-          // Log the full response for debugging
-          const responseText = await response.text();
-          console.log('Full API Response:', responseText);
-
-          if (!response.ok) {
-            console.error('API request failed:', {
-              status: response.status,
-              statusText: response.statusText,
-              responseBody: responseText
-            });
-            throw new Error(`API request failed with status ${response.status}: ${responseText}`);
-          }
-
-          // Parse the response if it was successful
-          const data = JSON.parse(responseText);
-          console.log('[302-Runway-Gen4-Turbo] parsed response:', data);
-
-          if (!data.task?.id) {
-            throw new Error('No task ID returned from Runway Gen4 Turbo API');
-          }
-
-          // Poll for the result using the helper function
-          const videoUrl = await pollRunwayTask(data.task.id, true);
+          // Convert base64 to video URL
+          const videoUrl = `data:video/mp4;base64,${videoData}`;
 
           // Store metadata in database
           const dbData = {
@@ -1346,12 +1299,12 @@ export async function POST(request: Request) {
             user_id: userId,
             prompt: prompt,
             negative_prompt: negativePrompt || null,
-            model: 'runway_gen4_turbo',
+            model: 'stability',
             image_url: videoUrl,
             created_at: new Date().toISOString(),
             type: 'video',
-            duration: duration,
-            resolution: '1280x768',
+            duration: 5,
+            resolution: `${width}x${height}`,
             fps: 30
           };
 
@@ -1374,25 +1327,179 @@ export async function POST(request: Request) {
             throw new Error(`Failed to store video metadata: ${dbError.message}`);
           }
 
-          console.log('Successfully generated and stored video with Runway Gen4 Turbo');
+          console.log('Successfully generated and stored video with Stability AI');
           return NextResponse.json({
             status: 'completed',
             video_url: videoUrl,
             metadata: {
-              model: 'runway_gen4_turbo',
-              task_id: data.task.id,
-              duration: duration,
-              seed: apiFormData.get('seed')
+              model: 'stability',
+              task_id: data.id,
+              duration: 5,
+              resolution: `${width}x${height}`,
+              fps: 30
             }
           });
         } catch (error) {
-          console.error('Runway Gen4 Turbo API error:', error);
+          console.error('Stability AI API error:', error);
           return NextResponse.json(
-            { error: 'Failed to generate video with Runway Gen4 Turbo: ' + (error as Error).message },
+            { error: 'Failed to generate video with Stability AI: ' + (error as Error).message },
             { status: 500 }
           );
         }
-        break;
+      }
+
+      case 'runway': {
+        if (!process.env.API_302_KEY) {
+          console.error('302 API key is missing');
+          return NextResponse.json(
+            { error: '302 API key is missing' },
+            { status: 500 }
+          );
+        }
+
+        try {
+          console.log('Calling Runway Text-to-Video API');
+          
+          // Get duration from form data (default to 5 seconds)
+          const duration = parseInt(formData.get('duration') as string) || 5;
+          
+          // Create form data for the request
+          const apiFormData = new FormData();
+          apiFormData.append('text_prompt', prompt);
+          apiFormData.append('seconds', duration.toString());
+          apiFormData.append('seed', Math.floor(Math.random() * 1000000).toString());
+
+          console.log('Making request to Runway API...');
+          const response = await fetch('https://api.302.ai/runway/submit', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.API_302_KEY}`
+            },
+            body: apiFormData
+          });
+
+          // Log the full response for debugging
+          const responseText = await response.text();
+          console.log('Full API Response:', responseText);
+
+          if (!response.ok) {
+            console.error('API request failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              responseBody: responseText
+            });
+            throw new Error(`API request failed with status ${response.status}: ${responseText}`);
+          }
+
+          // Parse the response if it was successful
+          const data = JSON.parse(responseText);
+          console.log('[302-Runway] parsed response:', data);
+
+          if (!data.task?.id) {
+            throw new Error('No task ID returned from Runway API');
+          }
+
+          // Poll for the result
+          let attempts = 0;
+          const maxAttempts = 60; // 10 minutes with 10-second intervals
+    let videoUrl;
+
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds between checks
+            attempts++;
+
+            console.log(`Polling attempt ${attempts}/${maxAttempts} for task ${data.task.id}`);
+
+            try {
+              const statusResponse = await fetch(`https://api.302.ai/runway/task/${data.task.id}/fetch`, {
+                headers: {
+                  'Accept': 'application/json',
+                  'Authorization': `Bearer ${process.env.API_302_KEY}`
+                }
+              });
+
+              if (!statusResponse.ok) {
+                const errorText = await statusResponse.text();
+                console.error('Error checking task status:', errorText);
+                continue;
+              }
+
+              const statusData = await statusResponse.json();
+              console.log('Status response:', JSON.stringify(statusData, null, 2));
+
+              // Check for video URL in the response
+              videoUrl = statusData.task?.artifacts?.[0]?.url;
+              
+              if (videoUrl) {
+                console.log('Found video URL:', videoUrl);
+                break;
+              }
+
+              if (statusData.task?.status === 'FAILED') {
+                throw new Error(`Task failed: ${statusData.task.error || 'Unknown error'}`);
+              }
+            } catch (error) {
+              console.error('Error during status check:', error);
+              continue;
+            }
+    }
+
+    if (!videoUrl) {
+            throw new Error('Video generation timed out or failed');
+          }
+
+          // Store metadata in database
+          const dbData = {
+            id: crypto.randomUUID(),
+            user_id: userId,
+            prompt: prompt,
+            negative_prompt: negativePrompt || null,
+            model: 'runway',
+            image_url: videoUrl,
+            created_at: new Date().toISOString(),
+            type: 'video',
+            duration: duration,
+            resolution: '1024x576', // Default resolution for Runway Gen-3
+            fps: 30
+          };
+
+          console.log('Attempting to insert into database:', dbData);
+
+    const { error: dbError } = await supabase
+      .from('generated_images')
+            .insert(dbData);
+
+          if (dbError) {
+            console.error('Database error details:', {
+              error: dbError,
+              code: dbError.code,
+              message: dbError.message,
+              details: dbError.details,
+              hint: dbError.hint,
+              table: 'generated_images',
+              data: dbData
+            });
+            throw new Error(`Failed to store video metadata: ${dbError.message}`);
+          }
+
+          console.log('Successfully generated and stored video with Runway');
+          return NextResponse.json({
+            status: 'completed',
+            video_url: videoUrl,
+            metadata: {
+              model: 'runway',
+              task_id: data.task.id,
+              duration: duration,
+              prompt: data.task?.options?.text_prompt
+            }
+          });
+        } catch (error) {
+          console.error('Runway API error:', error);
+          return NextResponse.json(
+            { error: 'Failed to generate video with Runway: ' + (error as Error).message },
+            { status: 500 }
+          );
+        }
       }
 
       case 'luma': {
@@ -1490,13 +1597,13 @@ export async function POST(request: Request) {
             // Store metadata in database
             const dbData = {
               id: crypto.randomUUID(),
-              user_id: userId,
-              prompt: prompt,
+        user_id: userId,
+        prompt: prompt,
               negative_prompt: negativePrompt || null,
               model: 'luma',
               image_url: result.video,
-              created_at: new Date().toISOString(),
-              type: 'video',
+        created_at: new Date().toISOString(),
+        type: 'video',
               duration: 5,
               resolution: '1024x576',
               fps: 30
@@ -1508,7 +1615,7 @@ export async function POST(request: Request) {
               .from('generated_images')
               .insert(dbData);
 
-            if (dbError) {
+    if (dbError) {
               console.error('Database error details:', {
                 error: dbError,
                 code: dbError.code,
@@ -1630,7 +1737,7 @@ export async function POST(request: Request) {
               .from('generated_images')
               .insert(dbData);
 
-            if (dbError) {
+    if (dbError) {
               console.error('Database error details:', {
                 error: dbError,
                 code: dbError.code,
@@ -1644,7 +1751,7 @@ export async function POST(request: Request) {
             }
 
             console.log('Successfully generated and stored video with Luma');
-            return NextResponse.json({
+    return NextResponse.json({
               status: 'completed',
               video_url: result.video,
               metadata: {
@@ -1659,6 +1766,170 @@ export async function POST(request: Request) {
           console.error('Luma API error:', error);
           return NextResponse.json(
             { error: 'Failed to generate video with Luma: ' + (error as Error).message },
+            { status: 500 }
+          );
+        }
+      }
+
+      case 'flux': {
+        if (!process.env.HUGGINGFACE_API_KEY) {
+          console.error('Hugging Face API key is missing');
+          return NextResponse.json(
+            { error: 'Hugging Face API key is missing. Please check your .env.local file.' },
+            { status: 500 }
+          );
+        }
+
+        try {
+          console.log('Calling FLUX.1-dev API');
+          
+          // Get input image from form data
+          const inputImage = formData.get('input_image') as File;
+          if (!inputImage) {
+            return NextResponse.json(
+              { error: 'Input image is required for FLUX' },
+              { status: 400 }
+            );
+          }
+
+          // Implement retry logic with exponential backoff
+          const MAX_RETRIES = 3;
+          let attempt = 0;
+          let response;
+          let data;
+
+          while (attempt < MAX_RETRIES) {
+            console.log(`Making request to FLUX.1-dev API (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            
+            // Create the request body according to the FLUX.1-dev API spec
+            const requestBody = {
+              inputs: prompt || 'Image-to-video generation',
+              parameters: {
+                height: 1024,
+                width: 1024,
+                guidance_scale: 3.5,
+                num_inference_steps: 50,
+                max_sequence_length: 512,
+                seed: Math.floor(Math.random() * 1000000)
+              }
+            };
+
+            console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+            response = await fetch('https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${process.env.HUGGINGFACE_API_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(requestBody)
+            });
+
+            const responseText = await response.text();
+            try {
+              data = JSON.parse(responseText);
+            } catch (e) {
+              console.error('Failed to parse response:', responseText);
+              throw new Error('Invalid response from FLUX API');
+            }
+
+            if (response.ok && data) {
+              // Success! Break out of the retry loop
+              break;
+            }
+
+            // Check for rate limit or service unavailable errors
+            if (response.status === 429 || response.status === 503) {
+              attempt++;
+              if (attempt < MAX_RETRIES) {
+                const delay = attempt * 2000; // 2s, 4s, 6s
+                console.warn(`FLUX service busy. Retrying in ${delay/1000}s (attempt ${attempt}/${MAX_RETRIES})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                continue;
+              }
+            }
+
+            // If it's a different kind of error or we're out of retries, throw
+            throw new Error(`FLUX API error: ${data.error || 'Unknown error'}`);
+          }
+
+          if (!response?.ok || data.error) {
+            throw new Error('Unable to generate after multiple FLUX retries');
+          }
+
+          console.log('[FLUX.1-dev] raw response:', data);
+
+          if (!data[0]?.image) {
+            throw new Error('No image data returned from FLUX API');
+          }
+
+          const imageData = data[0].image;
+          const videoUrl = `data:image/jpeg;base64,${imageData}`;
+
+          // Store metadata in database
+          const dbData = {
+            id: crypto.randomUUID(),
+            user_id: userId,
+            prompt: prompt || 'Image-to-video generation',
+            negative_prompt: negativePrompt || null,
+            model: 'flux-1-dev',
+            image_url: videoUrl,
+            created_at: new Date().toISOString(),
+            type: 'video',
+            duration: 5,
+            resolution: '1024x1024',
+            fps: 30
+          };
+
+          console.log('Attempting to insert into database:', dbData);
+
+          const { error: dbError } = await supabase
+            .from('generated_images')
+            .insert(dbData);
+
+          if (dbError) {
+            console.error('Database error details:', {
+              error: dbError,
+              code: dbError.code,
+              message: dbError.message,
+              details: dbError.details,
+              hint: dbError.hint,
+              table: 'generated_images',
+              data: dbData
+            });
+            throw new Error(`Failed to store video metadata: ${dbError.message}`);
+          }
+
+          console.log('Successfully generated and stored video with FLUX.1-dev');
+          return NextResponse.json({
+            status: 'completed',
+            video_url: videoUrl,
+            metadata: {
+              model: 'flux-1-dev',
+              height: 1024,
+              width: 1024,
+              guidance_scale: 3.5,
+              num_inference_steps: 50,
+              max_sequence_length: 512
+            }
+          });
+        } catch (error) {
+          console.error('FLUX API error:', error);
+          
+          // Check if it's a rate limit or service unavailable error
+          if (error instanceof Error && 
+              (error.message.includes('429') || error.message.includes('503'))) {
+            return NextResponse.json(
+              { 
+                error: 'FLUX service is currently at capacity. Please try again in a few minutes.',
+                details: 'The service is experiencing high demand. Your request will be processed when capacity becomes available.'
+              },
+              { status: 503 }
+            );
+          }
+          
+          return NextResponse.json(
+            { error: 'Failed to generate video with FLUX: ' + (error as Error).message },
             { status: 500 }
           );
         }

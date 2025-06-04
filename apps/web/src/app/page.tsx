@@ -3,6 +3,7 @@
 
 import { Layout } from '@/components/Layout';
 import { useEffect, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function Home() {
   const [userId, setUserId] = useState<string>('');
@@ -11,7 +12,7 @@ export default function Home() {
     // Generate or retrieve userId from localStorage
     let storedUserId = localStorage.getItem('userId');
     if (!storedUserId) {
-      storedUserId = Math.random().toString(36).substring(2, 15);
+      storedUserId = uuidv4();
       localStorage.setItem('userId', storedUserId);
     }
     setUserId(storedUserId);

@@ -11,6 +11,8 @@ interface Model {
   imageUrl: string;
   disabled?: boolean;
   disabledReason?: string;
+  rank?: number;
+  credits: number;
 }
 
 interface ModelSelectionModalProps {
@@ -29,16 +31,19 @@ const videoModels: Model[] = [
     description: 'Google\'s latest video generation model with exceptional quality and detail.',
     features: ['High Quality', 'Photorealistic', 'Fast Generation', 'Text-to-Video Only'],
     isRecommended: true,
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 1,
+    credits: 500
   },
   {
     id: 'kling',
     name: 'Kling',
     version: '1.0',
-    description: 'Advanced text-to-video generation with high-quality results.',
-    features: ['High Quality', 'Fast Generation'],
-    isRecommended: true,
-    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe'
+    description: 'Specialized in cinematic and movie-like scenes.',
+    features: ['Cinematic Scenes', 'Movie-like Quality', 'Dynamic Lighting'],
+    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe',
+    rank: 7,
+    credits: 15
   },
   {
     id: 'heygen',
@@ -46,7 +51,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'AI-powered video generation with realistic avatars.',
     features: ['Avatars', 'Lip Sync'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 7,
+    credits: 1
   },
   {
     id: 'hunyuan',
@@ -54,7 +61,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'High-quality video generation with standard and fast modes. Supports both text-to-video and image-to-video.',
     features: ['Standard Mode', 'Fast Mode', 'Text-to-Video', 'Image-to-Video', 'High Quality'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 8,
+    credits: 60
   },
   {
     id: 'pika',
@@ -62,7 +71,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'Innovative video generation with unique artistic styles.',
     features: ['Artistic', 'Creative', 'Text-to-Video'],
-    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe'
+    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe',
+    rank: 4,
+    credits: 70
   },
   {
     id: 'minimax',
@@ -70,7 +81,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'Advanced video generation with multiple modes: text-to-video, image-to-video, and subject reference.',
     features: ['Text-to-Video', 'Image-to-Video', 'Director Mode', 'Live Mode', 'Subject Reference'],
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 9,
+    credits: 50
   },
   {
     id: 'stability',
@@ -78,7 +91,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'Video generation from the creators of Stable Diffusion.',
     features: ['High Quality', 'Stable Diffusion', 'Text-to-Video'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 3,
+    credits: 40
   },
   {
     id: 'luma',
@@ -86,7 +101,9 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'Support creation of videos from text/images.',
     features: ['Text-to-Video', 'Image-to-Video', 'High Quality'],
-    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe'
+    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe',
+    rank: 5,
+    credits: 40
   },
   {
     id: 'runway',
@@ -94,20 +111,13 @@ const videoModels: Model[] = [
     version: '1.0',
     description: 'Professional video generation with advanced features.',
     features: ['Professional', 'Advanced Features', 'Text-to-Video'],
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 6,
+    credits: 50
   }
 ];
 
 const imageModels: Model[] = [
-  {
-    id: 'dall-e-3',
-    name: 'DALL-E 3',
-    version: '3.0',
-    description: 'OpenAI\'s latest image generation model with enhanced detail and prompt understanding.',
-    features: ['4K', 'Text Rendering', 'Complex Scenes'],
-    isRecommended: true,
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
-  },
   {
     id: 'midjourney',
     name: 'Midjourney',
@@ -115,15 +125,20 @@ const imageModels: Model[] = [
     description: 'High-quality artistic image generation with strong style control.',
     features: ['Artistic', 'Cinematic', 'Style Control'],
     isRecommended: true,
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 1,
+    credits: 5
   },
   {
-    id: 'stable-diffusion-xl',
-    name: 'Stable Diffusion XL',
-    version: '1.0',
-    description: 'Open-source model with extensive customization options.',
-    features: ['Custom Styles', 'ControlNet', 'High Resolution'],
-    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe'
+    id: 'dall-e-3',
+    name: 'DALL-E 3',
+    version: '3.0',
+    description: 'OpenAI\'s latest image generation model with enhanced detail and prompt understanding.',
+    features: ['4K', 'Text Rendering', 'Complex Scenes'],
+    isRecommended: true,
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 2,
+    credits: 4
   },
   {
     id: 'imagen-4',
@@ -132,31 +147,19 @@ const imageModels: Model[] = [
     description: 'Google\'s latest image generation model with exceptional quality and detail. Text-to-image only.',
     features: ['High Quality', 'Photorealistic', 'Fast Generation', 'Text-to-Image Only'],
     isRecommended: true,
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 3,
+    credits: 10
   },
   {
-    id: 'flux',
-    name: 'Flux',
+    id: 'stable-diffusion-xl',
+    name: 'Stable Diffusion XL',
     version: '1.0',
-    description: 'Specialized in dynamic and fluid art styles.',
-    features: ['Abstract Art', 'Fluid Dynamics', 'Color Blending'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
-  },
-  {
-    id: 'ideogram',
-    name: 'Ideogram',
-    version: '1.0',
-    description: 'Specialized in text-to-image generation with excellent text rendering.',
-    features: ['Text Rendering', 'Logo Design', 'Typography', 'Text-to-Image Only'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
-  },
-  {
-    id: 'recraft',
-    name: 'Recraft',
-    version: '1.0',
-    description: 'Focus on artistic and creative styles with style transfer.',
-    features: ['Artistic Rendering', 'Style Transfer', 'Creative Concepts'],
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    description: 'Open-source model with extensive customization options.',
+    features: ['Custom Styles', 'ControlNet', 'High Resolution'],
+    imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe',
+    rank: 4,
+    credits: 10
   },
   {
     id: 'gpt4o',
@@ -164,7 +167,9 @@ const imageModels: Model[] = [
     version: '1.0',
     description: 'Multimodal model with advanced image generation capabilities.',
     features: ['Text-to-Image', 'Context Understanding', 'Style Adaptation'],
-    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809'
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 5,
+    credits: 4
   },
   {
     id: 'hidream',
@@ -172,7 +177,39 @@ const imageModels: Model[] = [
     version: '1.0',
     description: 'High-quality text-to-image generation with a focus on artistic and photorealistic results.',
     features: ['High Quality', 'Photorealistic', 'Artistic Styles', 'Text-to-Image Only'],
-    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee'
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 6,
+    credits: 5
+  },
+  {
+    id: 'ideogram',
+    name: 'Ideogram',
+    version: '1.0',
+    description: 'Specialized in text-to-image generation with excellent text rendering.',
+    features: ['Text Rendering', 'Logo Design', 'Typography', 'Text-to-Image Only'],
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 7,
+    credits: 6
+  },
+  {
+    id: 'flux',
+    name: 'Flux',
+    version: '1.0',
+    description: 'Specialized in dynamic and fluid art styles.',
+    features: ['Abstract Art', 'Fluid Dynamics', 'Color Blending'],
+    imageUrl: 'https://images.unsplash.com/photo-1579546929518-9e396f3cc809',
+    rank: 8,
+    credits: 0.05
+  },
+  {
+    id: 'recraft',
+    name: 'Recraft',
+    version: '1.0',
+    description: 'Focus on artistic and creative styles with style transfer.',
+    features: ['Artistic Rendering', 'Style Transfer', 'Creative Concepts'],
+    imageUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee',
+    rank: 9,
+    credits: 5
   }
 ];
 
@@ -186,90 +223,46 @@ export const ModelSelectionModal: React.FC<ModelSelectionModalProps> = ({
   if (!isOpen) return null;
 
   const getAvailableModels = () => {
-    if (mode === 'image') {
-      // For image mode, determine which models should be disabled based on the selected art mode
-      return imageModels.map(model => {
-        let disabled = false;
-        let disabledReason = '';
-        
-        // All models support image reference except for specific cases
-        switch (selectedArtMode) {
-          case 'photographer':
-            // In photographer mode, all models are available as they all support image reference
-            disabled = false;
-            break;
-          case 'headshot':
-            // In headshot mode, all models support image reference
-            disabled = false;
-            break;
-          case 'interior':
-            // In interior mode, all models support image reference
-            disabled = false;
-            break;
-          case 'logo':
-            // In logo mode, only Ideogram is specialized for logo design
-            disabled = model.id !== 'ideogram';
-            disabledReason = 'Not specialized for logo design';
-            break;
-          case 'marketing':
-            // In marketing mode, all models are available
-            disabled = false;
-            break;
-          case 'tattoo':
-            // In tattoo mode, all models are available
-            disabled = false;
-            break;
-          default:
-            // Default to art mode behavior
-            disabled = false;
-        }
-
-        return {
-          ...model,
-          disabled,
-          disabledReason
-        };
-      });
-    }
-
-    // For video mode, determine which models should be disabled based on the selected art mode
-    return videoModels.map(model => {
+    const models = mode === 'image' ? imageModels : videoModels;
+    
+    // Sort models by rank
+    const sortedModels = [...models].sort((a, b) => (a.rank || 0) - (b.rank || 0));
+    
+    // Apply art mode restrictions
+    return sortedModels.map(model => {
       let disabled = false;
       let disabledReason = '';
       
+      // All models support image reference except for specific cases
       switch (selectedArtMode) {
-        case 'general':
-          // In general mode, only HeyGen is disabled
-          disabled = model.id === 'heygen';
-          disabledReason = 'Not available in general mode';
-          break;
-        case 'deepfake':
-          // In deepfake mode, only HeyGen and Luma are available
-          disabled = !['heygen', 'luma'].includes(model.id);
-          disabledReason = 'Not available in deepfake mode';
-          break;
-        case 'avatar':
-          // In avatar mode, only HeyGen is available
-          disabled = model.id !== 'heygen';
-          disabledReason = 'Not available in avatar mode';
-          break;
-        case 'admaker':
-          // In admaker mode, all models except HeyGen are available
-          disabled = model.id === 'heygen';
-          disabledReason = 'Not available in admaker mode';
-          break;
-        case 'movie':
-          // In movie mode, all models are available
+        case 'photographer':
+          // In photographer mode, all models are available as they all support image reference
           disabled = false;
           break;
-        case 'short':
-          // In short mode, all models are available
+        case 'headshot':
+          // In headshot mode, all models support image reference
+          disabled = false;
+          break;
+        case 'interior':
+          // In interior mode, all models support image reference
+          disabled = false;
+          break;
+        case 'logo':
+          // In logo mode, only Ideogram is specialized for logo design
+          disabled = model.id !== 'ideogram';
+          disabledReason = 'Not specialized for logo design';
+          break;
+        case 'marketing':
+          // In marketing mode, all models are available
+          disabled = false;
+          break;
+        case 'tattoo':
+          // In tattoo mode, all models are available
           disabled = false;
           break;
         default:
-          // Default to general mode behavior
-          disabled = model.id === 'heygen';
-          disabledReason = 'Not available in general mode';
+          // Default to art mode behavior
+          disabled = false;
       }
 
       return {
@@ -320,6 +313,12 @@ export const ModelSelectionModal: React.FC<ModelSelectionModalProps> = ({
                     className="object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  <div className="absolute top-2 left-2 bg-purple-900/90 text-white px-2 py-1 rounded-full text-sm">
+                    Rank #{model.rank}
+                  </div>
+                  <div className="absolute top-2 right-2 bg-blue-600/90 text-white px-2 py-1 rounded-full text-sm">
+                    {model.credits} Credits
+                  </div>
                 </div>
                 <div className="flex justify-between items-start mb-2">
                   <div>

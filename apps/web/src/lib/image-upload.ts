@@ -55,7 +55,14 @@ export async function uploadImageToTempStorage(file: File): Promise<string> {
       throw new Error('Failed to get public URL for uploaded image');
     }
 
-    console.log('Public URL:', publicUrl);
+    // Make sure the URL is publicly accessible
+    console.log('Verifying public URL...');
+    const response = await fetch(publicUrl);
+    if (!response.ok) {
+      throw new Error('Uploaded image is not publicly accessible');
+    }
+
+    console.log('Public URL verified:', publicUrl);
     return publicUrl;
   } catch (error) {
     console.error('Error in uploadImageToTempStorage:', error);

@@ -1,6 +1,30 @@
 import { supabase } from './supabase';
 import { subscriptionPlans } from './subscription-plans';
 
+// Add model credit costs at the top of the file
+export const MODEL_CREDIT_COSTS: Record<string, number> = {
+  // Image models
+  'dall-e-3': 4,
+  'stable-diffusion-xl': 10,
+  'gpt4o': 4,
+  'ideogram': 6,
+  'recraft': 5,
+  'flux': 0.05,
+  'imagen-4': 10,
+  'midjourney': 5,
+  'hidream': 5,
+  // Video models
+  'veo2': 500,
+  'kling': 15,
+  'heygen': 1,
+  'hunyuan': 60,
+  'pika': 70,
+  'minimax': 50,
+  'stability': 40,
+  'luma': 40,
+  'runway': 50
+};
+
 // Helper function to validate userId
 function isValidUserId(userId: string | undefined | null): userId is string {
   return Boolean(userId && typeof userId === 'string' && userId.trim() !== '');
@@ -54,7 +78,21 @@ export async function checkAndResetDailyLimit(userId: string | undefined | null)
   }
 
   try {
-    // Get user's subscription plan
+    // First, get user's current data
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('credits, last_reset_date')
+      .eq('id', userId)
+      .maybeSingle();
+
+    console.log('User query result:', { user, error: userError });
+
+    if (userError) {
+      console.error('Error fetching user data:', userError);
+      return 5; // Return default free tier limit on error
+    }
+
+    // Then get user's subscription plan
     const planId = await getUserSubscriptionPlan(userId);
     const plan = subscriptionPlans.find(p => p.id === planId);
 
@@ -63,45 +101,32 @@ export async function checkAndResetDailyLimit(userId: string | undefined | null)
       return 999999;
     }
 
-    // Get user's current daily limit and last reset date
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    // Get the daily limit based on the subscription plan
+    const dailyLimit = plan ? (typeof plan.features.imageGens === 'number' ? plan.features.imageGens : 999999) : 5;
 
-    console.log('User query result:', { user, error });
-
-    if (error) {
-      console.error('Error fetching user data:', error);
-      return 5; // Return default free tier limit on error
-    }
-
-    // If no user record exists, create one with default values
+    // If no user record exists, create one with the plan's limit
     if (!user) {
-      const defaultLimit = plan ? (typeof plan.features.imageGens === 'number' ? plan.features.imageGens : 5) : 5;
+      console.log('Creating new user record with limit:', dailyLimit);
+      
       const { error: insertError } = await supabase
         .from('users')
         .insert({
           id: userId,
-          daily_image_gens: defaultLimit,
+          credits: dailyLimit,
           last_reset_date: new Date().toISOString()
         });
 
       if (insertError) {
         console.error('Error creating user record:', insertError);
-        return 5; // Return default free tier limit on error
+        return dailyLimit; // Return plan's limit even if insert fails
       }
 
-      return defaultLimit;
+      return dailyLimit;
     }
 
     const today = new Date();
     const lastReset = user.last_reset_date ? new Date(user.last_reset_date) : new Date(0);
     
-    // Get the daily limit based on the subscription plan
-    const dailyLimit = plan ? (typeof plan.features.imageGens === 'number' ? plan.features.imageGens : 5) : 5;
-
     // Check if it's a new day
     if (
       !user.last_reset_date ||
@@ -113,27 +138,28 @@ export async function checkAndResetDailyLimit(userId: string | undefined | null)
       const { error: updateError } = await supabase
         .from('users')
         .update({
-          daily_image_gens: dailyLimit,
+          credits: dailyLimit,
           last_reset_date: today.toISOString(),
         })
         .eq('id', userId);
       
       if (updateError) {
         console.error('Error resetting daily limit:', updateError);
-        return user.daily_image_gens || 5; // Return current limit or default on error
+        return user.credits || dailyLimit; // Return current limit or plan's limit on error
       }
       
       return dailyLimit;
     }
 
-    return user.daily_image_gens || dailyLimit;
+    // Return the user's current credits, or the plan's limit if current credits are not set
+    return user.credits || dailyLimit;
   } catch (error) {
     console.error('Error in checkAndResetDailyLimit:', error);
     return 5; // Return default free tier limit on error
   }
 }
 
-export async function decrementDailyLimit(userId: string | undefined | null): Promise<number> {
+export async function decrementDailyLimit(userId: string | undefined | null, model: string): Promise<number> {
   // Guard clause for userId
   if (!isValidUserId(userId)) {
     console.warn("decrementDailyLimit called without a valid userId");
@@ -150,10 +176,10 @@ export async function decrementDailyLimit(userId: string | undefined | null): Pr
       return 999999;
     }
 
-    // Get current daily limit
+    // Get current credits
     const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('credits')
       .eq('id', userId)
       .maybeSingle();
 
@@ -169,23 +195,28 @@ export async function decrementDailyLimit(userId: string | undefined | null): Pr
       return 0;
     }
 
-    const currentGens = user.daily_image_gens || 5;
-    const remainingGens = Math.max(0, currentGens - 1);
+    // Get the credit cost for the model
+    const creditCost = MODEL_CREDIT_COSTS[model] || 1;
+    console.log(`Credit cost for model ${model}: ${creditCost}`);
+
+    const currentCredits = user.credits || 5;
+    const remainingCredits = Math.max(0, currentCredits - creditCost);
     
-    // Update the daily limit
+    // Update the credits
     const { error: updateError } = await supabase
       .from('users')
       .update({
-        daily_image_gens: remainingGens,
+        credits: remainingCredits,
       })
       .eq('id', userId);
 
     if (updateError) {
-      console.error('Error updating daily limit:', updateError);
-      return currentGens; // Return current limit on error
+      console.error('Error updating credits:', updateError);
+      return currentCredits; // Return current credits on error
     }
 
-    return remainingGens;
+    console.log(`Credits updated: ${currentCredits} -> ${remainingCredits} (cost: ${creditCost})`);
+    return remainingCredits;
   } catch (error) {
     console.error('Error in decrementDailyLimit:', error);
     return 0;

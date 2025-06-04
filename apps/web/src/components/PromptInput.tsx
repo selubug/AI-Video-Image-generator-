@@ -7,7 +7,7 @@ import { sendChatMessage } from '../utils/chat';
 import { Image } from '../types/image';
 import { supabase } from '../lib/supabase';
 import { subscriptionPlans, SubscriptionPlan } from '../lib/subscription-plans';
-import { checkAndResetDailyLimit, decrementDailyLimit } from '../lib/daily-limit';
+import { checkAndResetDailyLimit, decrementDailyLimit, MODEL_CREDIT_COSTS } from '../lib/daily-limit';
 import { toast } from 'react-hot-toast';
 import { SubscriptionPlans } from './SubscriptionPlans';
 
@@ -56,6 +56,25 @@ interface SliderPreset {
   };
 }
 
+// Define supported aspect ratios for each model
+const modelAspectRatios: { [key: string]: string[] } = {
+  'dall-e-3': ['1:1', '16:9', '9:16'],
+  'dall-e-2': ['1:1'],
+  'midjourney': ['1:1', '16:9', '9:16', '4:3', '3:4'],
+  'stable-diffusion': ['1:1', '16:9', '9:16', '4:3', '3:4'],
+  'flux': ['1:1', '16:9', '9:16', '4:3', '3:2', '2:3', '21:9'],
+  'recraft': ['1:1'],
+  'gpt4o': ['1:1'],
+  'kling': ['16:9', '9:16', '1:1'],
+  'runway': ['16:9', '9:16', '1:1'],
+  'pika': ['16:9', '9:16', '1:1'],
+  'luma': ['16:9'],
+  'stability': ['16:9', '9:16', '1:1'],
+  'veo2': ['16:9', '9:16'],
+  'hidream': ['16:9', '9:16', '1:1', '4:3', '3:4'],
+  'ideogram': ['1:1', '16:9', '9:16', '4:3', '3:4']
+};
+
 export const PromptInput: React.FC<PromptInputProps> = ({
   selectedPresetIds,
   currentPrompt,
@@ -74,6 +93,8 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [showAspectRatioMenu, setShowAspectRatioMenu] = useState(false);
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('16:9');
   const router = useRouter();
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastAnalyzedPromptRef = useRef<string>('');
@@ -84,6 +105,34 @@ export const PromptInput: React.FC<PromptInputProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [videoMode, setVideoMode] = useState<'text' | 'image'>('text');
+  const aspectRatioMenuRef = useRef<HTMLDivElement>(null);
+
+  // Update selected aspect ratio when model changes
+  useEffect(() => {
+    const supportedRatios = modelAspectRatios[selectedModel] || ['16:9'];
+    if (!supportedRatios.includes(selectedAspectRatio)) {
+      setSelectedAspectRatio(supportedRatios[0]);
+    }
+  }, [selectedModel, selectedAspectRatio]);
+
+  // Close aspect ratio menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (aspectRatioMenuRef.current && !aspectRatioMenuRef.current.contains(event.target as Node)) {
+        setShowAspectRatioMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Get supported aspect ratios for current model
+  const getSupportedAspectRatios = () => {
+    return modelAspectRatios[selectedModel] || ['16:9'];
+  };
 
   // Function to handle the API call when typing stops
   const handleTypingComplete = useCallback(async (prompt: string) => {
@@ -198,9 +247,7 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
       // Guard clause for userId
       if (!userId || typeof userId !== 'string' || userId.trim() === '') {
         console.log('PromptInput: userId not ready yet');
-        setDailyGens(5); // Set default limit
-        setCurrentPlan('free'); // Set default plan
-        return;
+        return; // Don't set default values, just return
       }
 
       try {
@@ -217,9 +264,7 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
 
         if (subscriptionError) {
           console.error('Error fetching subscription:', subscriptionError);
-          setDailyGens(5);
-          setCurrentPlan('free');
-          return;
+          return; // Don't set default values on error
         }
 
         // Set current plan based on subscription
@@ -244,9 +289,7 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
 
       } catch (error) {
         console.error('Error checking daily limit:', error);
-        // Set safe defaults on error
-        setDailyGens(5);
-        setCurrentPlan('free');
+        // Don't set default values on error
       }
     };
 
@@ -284,7 +327,7 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
                          (mode === 'video' && selectedModel === 'stability');
 
   // Determine if the selected model supports image reference
-  const supportsImageReference = ['gpt4o', 'recraft', 'kling', 'runway'].includes(selectedModel) || 
+  const supportsImageReference = ['gpt4o', 'recraft', 'kling'].includes(selectedModel) || 
     (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'pika' || selectedModel === 'luma'));
 
   // Get image upload message based on art mode
@@ -311,19 +354,23 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
   };
 
   const handleGenerate = async () => {
-    setIsLoading(true);
-    setApiError('');
-    try {
-      // Check if user has remaining generations
-      if (dailyGens <= 0) {
-        toast.error('You have reached your daily limit. Please upgrade to generate more images.');
-        setShowSubscriptionPlans(true);
-        return;
-      }
+    if (!currentPrompt.trim()) {
+      setApiError('Please enter a prompt');
+      return;
+    }
 
-      // Decrement the daily limit
-      const remaining = await decrementDailyLimit(userId);
-      setDailyGens(remaining);
+    if (dailyGens <= 0) {
+      setApiError('You have reached your daily limit');
+      return;
+    }
+
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      // Decrement the daily limit first
+      const remainingCredits = await decrementDailyLimit(userId, selectedModel);
+      setDailyGens(remainingCredits);
 
       // Check for required image for Higgsfield
       if (mode === 'video' && selectedModel === 'stability' && !selectedImage) {
@@ -333,11 +380,6 @@ ${negativePrompt ? `Negative Prompt: ${negativePrompt}` : ''}`;
 
       if (mode === 'video' && videoMode === 'image' && !selectedImage) {
         setApiError('Please upload an image');
-        return;
-      }
-
-      if (!currentPrompt.trim()) {
-        setApiError('Please enter a prompt');
         return;
       }
 
@@ -428,6 +470,7 @@ Please provide a detailed analysis of how these specifications will affect the g
       formData.append('model', selectedModel);
       formData.append('negativePrompt', negativePrompt);
       formData.append('userId', userId);
+      formData.append('aspect_ratio', selectedAspectRatio);
       
       // Add image to form data if it exists and we're using a model that supports image reference
       if (selectedImage) {
@@ -446,7 +489,7 @@ Please provide a detailed analysis of how these specifications will affect the g
         
         formData.append('options', JSON.stringify({
           duration: duration,
-          aspect_ratio: '16:9'
+          aspect_ratio: selectedAspectRatio
         }));
         
         // Add default motion for Higgsfield if none specified
@@ -500,85 +543,24 @@ Please provide a detailed analysis of how these specifications will affect the g
       }
 
       if (mode === 'video') {
-        // For PIAPI-based models, we need to poll for the result
-        if (data.taskId) {
-          let videoData;
-          let attempts = 0;
-          const maxAttempts = 60; // 5 minutes with 5-second intervals
-          
-          while (attempts < maxAttempts) {
-            const statusResponse = await fetch(`/api/video-status?taskId=${data.taskId}`);
-            const statusData = await statusResponse.json();
-
-            if (!statusResponse.ok) {
-              console.error('Video status check failed:', {
-                status: statusResponse.status,
-                statusText: statusResponse.statusText,
-                data: statusData
-              });
-              throw new Error(statusData.error || statusData.details || 'Failed to check video status');
-            }
-
-            if (statusData.status === 'completed' && statusData.videoUrl) {
-              videoData = statusData;
-              break;
-            }
-
-            if (statusData.status === 'failed') {
-              console.error('Video generation failed:', statusData);
-              throw new Error(statusData.error || statusData.details || 'Video generation failed');
-            }
-
-            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
-            attempts++;
-          }
-          
-          if (!videoData?.videoUrl) {
-            throw new Error('Video generation timed out');
-          }
-
-          // Generate a proper UUID for the video ID
-          const videoId = crypto.randomUUID();
-
-          // Save the video to the database
-          const { error: dbError } = await supabase
-            .from('generated_images')
-            .insert({
-              id: videoId,
-              user_id: userId,
-              prompt: optimizedPrompt,
-              negative_prompt: negativePrompt,
-              model: selectedModel,
-              image_url: videoData.videoUrl,
-              created_at: new Date().toISOString(),
-              type: 'video',
-              duration: videoData.duration,
-              resolution: videoData.resolution,
-              fps: videoData.fps
-            });
-
-          if (dbError) {
-            console.error('Error saving video to database:', dbError);
-            throw new Error('Failed to save video to database');
-          }
-
-          // Add the generated video to the gallery
-          onAddToGallery({
-            id: videoId,
-            url: videoData.videoUrl,
-            prompt: optimizedPrompt,
-            negativePrompt: negativePrompt,
-            model: selectedModel,
-            createdAt: new Date().toISOString(),
-            type: 'video',
-            duration: videoData.duration,
-            resolution: videoData.resolution,
-            fps: videoData.fps
-          });
-        } else if (!data.videoUrl) {
+        if (!data.video_url) {
           console.error('No video URL in response:', data);
           throw new Error('No video URL received from server');
         }
+
+        // Add the generated video to the gallery
+        onAddToGallery({
+          id: data.videoId || crypto.randomUUID(),
+          url: data.video_url,
+          prompt: optimizedPrompt,
+          negativePrompt: negativePrompt,
+          model: selectedModel,
+          createdAt: new Date().toISOString(),
+          type: 'video',
+          duration: data.metadata?.duration || 5,
+          resolution: data.metadata?.resolution || '1024x576',
+          fps: data.metadata?.fps || 30
+        });
       } else {
         if (!data.imageUrl) {
           console.error('No image URL in response:', data);
@@ -623,7 +605,7 @@ Please provide a detailed analysis of how these specifications will affect the g
   return (
     <div className="space-y-4">
       {/* Image Upload Section */}
-      {(mode === 'image' || (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'kling' || selectedModel === 'runway' || selectedModel === 'pika' || selectedModel === 'luma'))) && supportsImageReference && selectedModel !== 'ideogram' && (
+      {(mode === 'image' || (mode === 'video' && (selectedModel === 'stability' || selectedModel === 'kling' || selectedModel === 'pika' || selectedModel === 'luma'))) && supportsImageReference && selectedModel !== 'ideogram' && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
@@ -684,8 +666,73 @@ Please provide a detailed analysis of how these specifications will affect the g
             />
           </div>
 
-      {/* Generate Button */}
-      <div className="flex justify-end">
+      {/* Generate Button and Aspect Ratio Selector */}
+      <div className="flex justify-end items-center space-x-2 -mt-2">
+        <button
+          onClick={() => setShowSubscriptionPlans(true)}
+          className="flex items-center space-x-1 px-3 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 14a6 6 0 110-12 6 6 0 010 12z" />
+            <path d="M10 4a6 6 0 100 12 6 6 0 000-12zm0 10a4 4 0 110-8 4 4 0 010 8z" />
+          </svg>
+          <span>{dailyGens} credits</span>
+          <span className="text-gray-400">•</span>
+          <span className="text-gray-500">costs {MODEL_CREDIT_COSTS[selectedModel] || 1} credits</span>
+        </button>
+
+        <button
+          onClick={() => router.push('/favorites')}
+          className="flex items-center space-x-1 px-3 py-1 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+          </svg>
+          <span>Favorites</span>
+        </button>
+
+        <div className="relative" ref={aspectRatioMenuRef}>
+          <button
+            onClick={() => setShowAspectRatioMenu(!showAspectRatioMenu)}
+            className="flex items-center space-x-1 px-2 py-1 text-xs font-medium text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <span>{selectedAspectRatio}</span>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showAspectRatioMenu && (
+            <div className="absolute left-0 bottom-full mb-1 w-32 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5">
+              <div className="py-1" role="menu" aria-orientation="vertical">
+                {['1:1', '16:9', '9:16', '4:3', '3:4'].map((ratio) => {
+                  const isSupported = getSupportedAspectRatios().includes(ratio);
+                  return (
+                    <button
+                      key={ratio}
+                      onClick={() => {
+                        if (isSupported) {
+                          setSelectedAspectRatio(ratio);
+                          setShowAspectRatioMenu(false);
+                        }
+                      }}
+                      className={`w-full text-left px-2 py-1 text-xs ${
+                        isSupported
+                          ? 'text-gray-700 hover:bg-gray-100'
+                          : 'text-gray-400 cursor-not-allowed'
+                      } ${selectedAspectRatio === ratio ? 'bg-gray-100' : ''}`}
+                      disabled={!isSupported}
+                      role="menuitem"
+                    >
+                      {ratio}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={handleGenerate}
           disabled={isLoading || (!currentPrompt.trim() && !selectedImage) || (isImageRequired && !selectedImage)}
