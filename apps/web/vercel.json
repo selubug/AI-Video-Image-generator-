@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd ../.. && pnpm install --frozen-lockfile && pnpm build",
+  "outputDirectory": "apps/web/.next",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && pnpm install --frozen-lockfile",
+  "builds": [
+    {
+      "src": "apps/web/package.json",
+      "use": "@vercel/next"
+    }
+  ]
+} 
