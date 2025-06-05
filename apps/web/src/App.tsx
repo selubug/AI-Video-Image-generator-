@@ -8,7 +8,14 @@ function App() {
       <div style={{ display: 'flex', border: '1px solid lightgrey', minHeight: '80vh' }}>
         {/* Left Panel */}
         <div style={{ width: '300px', borderRight: '1px solid lightgrey', padding: '10px', overflowY: 'auto' }}>
-          <PresetList />
+          <PresetList 
+            selectedPresetIds={{}}
+            onPresetToggle={() => {}}
+            mode="image"
+            onModeChange={() => {}}
+            selectedArtMode={null}
+            onArtModeChange={() => {}}
+          />
         </div>
 
         {/* Center Panel */}
