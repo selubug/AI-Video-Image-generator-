@@ -53,7 +53,7 @@ interface RunwayResult {
   video: string;
   seed?: string;
   aspect_ratio?: string;
-    duration?: number;
+  duration?: number;
   file_size?: number;
   content_type?: string;
 }
@@ -62,16 +62,40 @@ interface RunwayResponse {
   state: string;
   video?: string;
   seed?: string;
-    aspect_ratio?: string;
+  aspect_ratio?: string;
   duration?: number;
   file_size?: number;
   content_type?: string;
   error?: string;
   task?: {
     status: string;
-    artifacts?: Array<{ url: string }>;
+    artifacts?: Array<{ 
+      url: string;
+      aspect_ratio?: string;
+      duration?: number;
+      file_size?: number;
+      content_type?: string;
+    }>;
     error?: string;
   };
+}
+
+interface PikaRequestBody {
+  promptText: string;
+  seed: number;
+  resolution: string;
+  duration: string;
+  aspectRatio: number;
+  negativePrompt?: string;
+}
+
+interface VideoResult {
+  video: string;
+  aspect_ratio?: string;
+  duration?: number;
+  file_size?: number;
+  content_type?: string;
+  seed?: string;
 }
 
 // Helper function to safely parse JSON
@@ -249,7 +273,7 @@ export async function POST(request: Request) {
     }
 
     // Decrement daily limit
-    await decrementDailyLimit(userId);
+    await decrementDailyLimit(userId, model);
     console.log('Daily limit decremented for user:', userId);
 
     // Handle different models
@@ -569,7 +593,7 @@ export async function POST(request: Request) {
           // Poll for the result
     let attempts = 0;
           const maxAttempts = 60; // 10 minutes with 10-second intervals
-          let result;
+          let result: VideoResult | null = null;
 
           while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds between checks
@@ -606,16 +630,29 @@ export async function POST(request: Request) {
 
               // Check for both response formats
               if (statusData.task?.status === 'SUCCEEDED' && statusData.task.artifacts?.[0]?.url) {
-                result = {
-                  video: statusData.task.artifacts[0].url
+                const artifact = statusData.task.artifacts[0];
+                const videoResult: VideoResult = {
+                  video: artifact.url,
+                  aspect_ratio: artifact.aspect_ratio || statusData.aspect_ratio,
+                  duration: artifact.duration || statusData.duration,
+                  file_size: artifact.file_size || statusData.file_size,
+                  content_type: artifact.content_type || statusData.content_type,
+                  seed: statusData.seed
                 };
+                result = videoResult;
                 break;
               }
 
               if (statusData.state === 'SUCCEEDED' && statusData.video) {
-                result = {
-                  video: statusData.video
+                const videoResult: VideoResult = {
+                  video: statusData.video,
+                  aspect_ratio: statusData.aspect_ratio,
+                  duration: statusData.duration,
+                  file_size: statusData.file_size,
+                  content_type: statusData.content_type,
+                  seed: statusData.seed
                 };
+                result = videoResult;
                 break;
               }
 
@@ -659,11 +696,12 @@ export async function POST(request: Request) {
               type: 'video',
               url: videoUrl,
               metadata: {
-                aspect_ratio: result.video.aspect_ratio,
-                duration: result.video.duration,
-                file_size: result.video.file_size,
-                content_type: result.video.content_type,
-                seed: result.seed
+                model: 'veo2',
+                task_id: data.request_id,
+                aspect_ratio: options?.aspect_ratio || '16:9',
+                duration: 5,
+                file_size: 0,
+                content_type: 'video/mp4'
               }
             });
 
@@ -677,11 +715,12 @@ export async function POST(request: Request) {
             status: 'completed',
             video_url: videoUrl,
             metadata: {
-              aspect_ratio: result.video.aspect_ratio,
-              duration: result.video.duration,
-              file_size: result.video.file_size,
-              content_type: result.video.content_type,
-              seed: result.seed
+              model: 'veo2',
+              task_id: data.request_id,
+              aspect_ratio: options?.aspect_ratio || '16:9',
+              duration: 5,
+              file_size: 0,
+              content_type: 'video/mp4'
             }
           });
         } catch (error) {
@@ -1032,11 +1071,11 @@ export async function POST(request: Request) {
           };
 
           // Build the JSON payload
-          const body = {
+          const body: PikaRequestBody = {
             promptText: prompt,
             seed: Math.floor(Math.random() * 1_000_000),
-            resolution: '720p', // cheapest option: 720p-5s (0.3 PTC/call)
-            duration: '5', // 5 seconds
+            resolution: '720p',
+            duration: '5',
             aspectRatio: arMap[options?.aspect_ratio ?? '16:9']
           };
 
