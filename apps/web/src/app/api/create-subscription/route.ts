@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createSubscription } from '@/lib/stripe-server';
 import { supabase } from '@/lib/supabase';
+import Stripe from 'stripe';
+import type { Stripe as StripeType } from 'stripe';
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       subscriptionId: subscription.id,
-      clientSecret: subscription.latest_invoice?.payment_intent?.client_secret,
+      clientSecret: (subscription.latest_invoice as StripeType.Invoice & { payment_intent?: { client_secret: string } })?.payment_intent?.client_secret,
     });
   } catch (error) {
     console.error('Error creating subscription:', error);
