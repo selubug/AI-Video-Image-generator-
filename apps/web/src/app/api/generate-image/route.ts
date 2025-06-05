@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
     // Validate model type
     const isValidModel = (m: string): m is Model => {
-      return ['dall-e-3', 'stable-diffusion-xl', 'gpt4o', 'ideogram', 'recraft', 'flux', 'imagen-4', 'midjourney', 'veo2', 'hidream'].includes(m as Model);
+      return ['dall-e-3', 'stable-diffusion-xl', 'gpt4o', 'ideogram', 'recraft', 'flux', 'imagen-4', 'midjourney', 'veo2', 'hidream', 'kling'].includes(m as Model);
     };
 
     if (!isValidModel(model)) {
@@ -1625,7 +1625,7 @@ export async function POST(req: Request) {
       console.log('Starting database save operation...');
       
       // If it's Midjourney with multiple images, save each one separately
-      if (model === 'midjourney' && base64Images && base64Images.length > 0) {
+      if ((model as Model) === 'midjourney' && base64Images && base64Images.length > 0) {
         const savePromises = base64Images.map(async (base64Image, index) => {
       const imageData = {
             id: uuidv4(),
