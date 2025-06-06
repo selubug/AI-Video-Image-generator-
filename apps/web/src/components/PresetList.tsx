@@ -369,7 +369,7 @@ export function PresetList({
       {/* Logo and Mode Selection */}
       <div className="p-4 border-b border-purple-700/50">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-white">Spellbook</h1>
+          <h1 className="text-2xl font-bold text-white">Auraflix</h1>
         </div>
         
         {/* Mode Selection Buttons */}
