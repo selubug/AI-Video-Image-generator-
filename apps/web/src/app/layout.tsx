@@ -8,8 +8,8 @@ import { ProtectedRoute } from '@/components/ProtectedRoute';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Prompt Helper',
-  description: 'AI-powered image generation assistant',
+  title: 'Auraflix Studio',
+  description: 'AI-powered creative studio for image and video generation',
 };
 
 export default function RootLayout({
