@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createSubscription } from '@/lib/stripe-server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 import Stripe from 'stripe';
 import type { Stripe as StripeType } from 'stripe';
 

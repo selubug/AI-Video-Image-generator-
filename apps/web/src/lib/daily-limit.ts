@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase } from '@/utils/supabase';
 import { subscriptionPlans } from './subscription-plans';
 
 // Add model credit costs at the top of the file
@@ -70,7 +70,7 @@ async function getUserSubscriptionPlan(userId: string | undefined | null) {
   }
 }
 
-export async function checkAndResetDailyLimit(userId: string | undefined | null): Promise<number> {
+export async function checkAndResetDailyLimit(userId: string | undefined | null, createIfMissing: boolean = false): Promise<number> {
   // Guard clause for userId
   if (!isValidUserId(userId)) {
     console.warn("checkAndResetDailyLimit called without a valid userId");
@@ -104,29 +104,38 @@ export async function checkAndResetDailyLimit(userId: string | undefined | null)
     // Get the daily limit based on the subscription plan
     const dailyLimit = plan ? (typeof plan.features.imageGens === 'number' ? plan.features.imageGens : 999999) : 5;
 
-    // If no user record exists, create one with the plan's limit
-    if (!user) {
-      console.log('Creating new user record with limit:', dailyLimit);
+    // If no user record exists, only create if createIfMissing is true
+    if (!user && createIfMissing) {
+      console.log('Creating or updating user record with limit:', dailyLimit);
       
-      const { error: insertError } = await supabase
+      const { error: upsertError } = await supabase
         .from('users')
-        .insert({
+        .upsert({
           id: userId,
           credits: dailyLimit,
           last_reset_date: new Date().toISOString()
         });
 
-      if (insertError) {
-        console.error('Error creating user record:', insertError);
-        return dailyLimit; // Return plan's limit even if insert fails
+      if (upsertError) {
+        // Improved error logging for debugging
+        console.error('Error upserting user record:', JSON.stringify(upsertError, null, 2));
+        if (upsertError.message) {
+          alert('User upsert failed: ' + upsertError.message);
+        } else {
+          alert('User upsert failed: ' + JSON.stringify(upsertError));
+        }
+        return dailyLimit; // Return plan's limit even if upsert fails
       }
 
+      return dailyLimit;
+    } else if (!user) {
+      // If user does not exist and we are not creating, return default limit
       return dailyLimit;
     }
 
     const today = new Date();
     const lastReset = user.last_reset_date ? new Date(user.last_reset_date) : new Date(0);
-    
+
     // Check if it's a new day
     if (
       !user.last_reset_date ||

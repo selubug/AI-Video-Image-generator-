@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 import { checkAndResetDailyLimit, decrementDailyLimit } from '@/lib/daily-limit';
 
 export async function POST(request: Request) {

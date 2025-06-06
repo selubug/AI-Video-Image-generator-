@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 
 export async function uploadImageToTempStorage(file: File): Promise<string> {
   try {

@@ -8,5 +8,4 @@ export type Model =
   | 'imagen-4'
   | 'midjourney'
   | 'veo2'
-  | 'hidream'
-  | 'kling'; 
+  | 'hidream'; 

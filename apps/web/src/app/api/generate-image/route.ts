@@ -3,6 +3,8 @@ import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/utils/supabase';
 import { Model } from '@/types/models';
+import { cookies as getCookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
 
 interface TextPrompt {
   text: string;
@@ -20,8 +22,36 @@ export async function POST(req: Request) {
     const prompt = formData.get('prompt') as string;
     const model = formData.get('model') as Model;
     const negativePrompt = formData.get('negativePrompt') as string;
-    const userId = formData.get('userId') as string;
     const image = formData.get('image') as File | null;
+
+    // Debug: Log cookies
+    const cookieStore = await getCookies();
+    console.log('DEBUG: All cookies received in API route:', cookieStore.getAll());
+    const supabaseServer = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get: (key) => cookieStore.get(key)?.value,
+          set: (key, value, options) => {
+            // Not needed for most GET/POST handlers
+          },
+          remove: (key, options) => {
+            // Not needed for most GET/POST handlers
+          }
+        }
+      }
+    );
+    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+    console.log('DEBUG: Supabase user:', user);
+    if (userError) {
+      console.error('DEBUG: Error from supabaseServer.auth.getUser():', userError);
+    }
+    if (!user) {
+      console.error('DEBUG: Not authenticated - user is null');
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+    const userId = user.id;
 
     console.log('Received request:', { model, prompt, negativePrompt, hasImage: !!image });
 
@@ -34,7 +64,7 @@ export async function POST(req: Request) {
 
     // Validate model type
     const isValidModel = (m: string): m is Model => {
-      return ['dall-e-3', 'stable-diffusion-xl', 'gpt4o', 'ideogram', 'recraft', 'flux', 'imagen-4', 'midjourney', 'veo2', 'hidream', 'kling'].includes(m as Model);
+      return ['dall-e-3', 'stable-diffusion-xl', 'gpt4o', 'ideogram', 'recraft', 'flux', 'imagen-4', 'midjourney', 'veo2', 'hidream'].includes(m as Model);
     };
 
     if (!isValidModel(model)) {
@@ -1625,7 +1655,7 @@ export async function POST(req: Request) {
       console.log('Starting database save operation...');
       
       // If it's Midjourney with multiple images, save each one separately
-      if ((model as Model) === 'midjourney' && base64Images && base64Images.length > 0) {
+      if (model === 'midjourney' as Model && base64Images && base64Images.length > 0) {
         const savePromises = base64Images.map(async (base64Image, index) => {
       const imageData = {
             id: uuidv4(),

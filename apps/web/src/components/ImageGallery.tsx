@@ -106,7 +106,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
     } finally {
       setIsLoadingMore(false);
     }
-  }, [supabase, isLoadingMore, hasMore, allImages]);
+  }, [supabase, isLoadingMore, hasMore, allImages.length]);
 
   useEffect(() => {
     const totalExpected = allImages.length + images.length;
@@ -132,16 +132,13 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
 
   // Define fetchInitialImages using useCallback
   const fetchInitialImages = useCallback(async () => {
-    if (!supabase) return;
-    setAllImages([]);
-    setHasMore(true);
-    setIsLoadingMore(false);
-    initialLoadScrollDone.current = false;
+    if (!supabase || !userId) return;
 
     try {
       const { data, error } = await supabase
         .from('generated_images')
         .select('id, image_url, prompt, negative_prompt, model, created_at, type, duration, resolution, fps')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(INITIAL_BATCH_SIZE);
 
@@ -169,8 +166,7 @@ export const ImageGallery: React.FC<ImageGalleryProps> = ({ images, userId }) =>
       console.error('Error fetching initial images:', error);
       setHasMore(false); // Stop loading more if initial fetch fails
     }
-  // Add supabase to dependencies if it's potentially reactive
-  }, [supabase]);
+  }, [supabase, userId]);
 
   // Define fetchFavorites using useCallback
   const fetchFavorites = useCallback(async () => {

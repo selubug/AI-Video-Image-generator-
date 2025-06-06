@@ -2,13 +2,13 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/utils/supabase';
-import { User } from '@supabase/supabase-js';
+import { User, Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   resendConfirmationEmail: (email: string) => Promise<void>;
@@ -47,16 +47,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-    if (error) throw error;
+    try {
+      // Attempt to sign up directly with Supabase auth
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        }
+      });
+
+      if (signUpError) {
+        // Handle specific error cases
+        if (signUpError.message.includes('already registered')) {
+          throw new Error('Email already registered. Please sign in or use a different email.');
+        }
+        throw signUpError;
+      }
+
+      // Check if signup was successful
+      if (!data?.user) {
+        throw new Error('Failed to create account. Please try again.');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error during sign up:', error);
+      throw error;
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    try {
+      // Clear any local storage items first
+      localStorage.removeItem('supabase.auth.token');
+      
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut({
+        scope: 'local'
+      });
+      
+      if (error) throw error;
+      
+      // Clear the user state
+      setUser(null);
+    } catch (error) {
+      console.error('Error signing out:', error);
+      throw error;
+    }
   };
 
   const resetPassword = async (email: string) => {

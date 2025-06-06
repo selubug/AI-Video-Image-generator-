@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import TextareaAutosize from 'react-textarea-autosize';
 import { sendChatMessage } from '../utils/chat';
 import { Image } from '../types/image';
-import { supabase } from '../lib/supabase';
+import { supabase } from '../utils/supabase';
 import { subscriptionPlans, SubscriptionPlan } from '../lib/subscription-plans';
 import { checkAndResetDailyLimit, decrementDailyLimit, MODEL_CREDIT_COSTS } from '../lib/daily-limit';
 import { toast } from 'react-hot-toast';

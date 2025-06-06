@@ -9,7 +9,7 @@ export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | React.ReactNode | null>(null);
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
   const router = useRouter();
@@ -26,10 +26,27 @@ export default function SignUpPage() {
     setLoading(true);
 
     try {
-      await signUp(email, password);
-      router.push('/auth/verify-email');
+      const { user } = await signUp(email, password);
+      if (user) {
+        router.push('/auth/verify-email');
+      } else {
+        setError('Failed to create account. Please try again.');
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred during sign up');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred during sign up';
+      setError(errorMessage);
+      
+      // If email already exists, suggest signing in
+      if (errorMessage.includes('already registered')) {
+        setError(
+          <div>
+            <p>{errorMessage}</p>
+            <Link href="/auth/login" className="text-blue-500 hover:text-blue-700 mt-2 inline-block">
+              Click here to sign in
+            </Link>
+          </div>
+        );
+      }
     } finally {
       setLoading(false);
     }

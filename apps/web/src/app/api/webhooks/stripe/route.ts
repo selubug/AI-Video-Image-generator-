@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe-server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 import { subscriptionPlans } from '@/lib/subscription-plans';
 
 export async function POST(req: Request) {

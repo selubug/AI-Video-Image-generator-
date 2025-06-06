@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 
 export async function GET() {
   const taskId = '6950d4f138b95b1ccfa0761bbb4d2b18ab5118e23552e2d8ba140bd192137990';

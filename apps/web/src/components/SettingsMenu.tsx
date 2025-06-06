@@ -23,10 +23,14 @@ export function SettingsMenu() {
 
   const handleSignOut = async () => {
     try {
+      setIsOpen(false);
       await signOut();
+      localStorage.clear();
+      sessionStorage.clear();
       router.push('/auth/login');
     } catch (error) {
       console.error('Error signing out:', error);
+      router.push('/auth/login');
     }
   };
 

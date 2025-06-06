@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Elements } from '@stripe/react-stripe-js';
 import { stripePromise } from '../lib/stripe';
 import { CheckoutForm } from './CheckoutForm';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/utils/supabase';
 import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { subscriptionPlans } from '@/lib/subscription-plans';

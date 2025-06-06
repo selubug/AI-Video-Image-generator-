@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { supabase } from '@/utils/supabase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,9 +20,35 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      console.log('Attempting to sign in...');
+      const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (signInError) throw signInError;
+      
+      console.log('Sign in successful, checking session...');
+      console.log('Session:', session);
+      
+      if (!session) {
+        throw new Error('No session created after sign in');
+      }
+      
+      // Get the user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      console.log('User:', user);
+      if (userError) console.error('User error:', userError);
+      
+      // Ensure the session is persisted
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+      
       router.push('/');
     } catch (err) {
+      console.error('Sign in error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred during sign in');
     } finally {
       setLoading(false);

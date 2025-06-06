@@ -1,7 +1,7 @@
 -- Create the generated_images table
 CREATE TABLE IF NOT EXISTS public.generated_images (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     prompt TEXT NOT NULL,
     negative_prompt TEXT,
     model TEXT NOT NULL,
