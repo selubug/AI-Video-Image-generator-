@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createSubscription } from '@/lib/stripe-server';
+import { createSubscription, createStripeCustomer } from '@/lib/stripe-server';
 import { supabase } from '@/utils/supabase';
 import Stripe from 'stripe';
 import type { Stripe as StripeType } from 'stripe';
@@ -23,18 +23,18 @@ export async function POST(request: Request) {
 
     // If user doesn't have a Stripe customer ID, create one
     if (!customerId) {
-      const { data: customer, error: customerError } = await supabase
+      const customer = await createStripeCustomer(user.email, userId);
+      customerId = customer.id;
+
+      // Update user with new Stripe customer ID
+      const { error: updateError } = await supabase
         .from('users')
         .update({ stripe_customer_id: customerId })
-        .eq('id', userId)
-        .select()
-        .single();
+        .eq('id', userId);
 
-      if (customerError) {
-        throw new Error('Error creating Stripe customer');
+      if (updateError) {
+        throw new Error('Error updating user with Stripe customer ID');
       }
-
-      customerId = customer.stripe_customer_id;
     }
 
     // Create the subscription
