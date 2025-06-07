@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { FavoritesGallery } from '../../components/FavoritesGallery';
-import { useUser } from '../../hooks/useUser';
+import { FavoritesGallery } from '@/components/FavoritesGallery';
+import { useUser } from '@/hooks/useUser';
 
 export default function FavoritesPage() {
   const router = useRouter();
