@@ -71,11 +71,11 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({
     <div className="flex flex-col h-full bg-white">
       {/* Top Section - Model Selector and Settings */}
       <div className="p-2 border-b border-yellow-400/30 bg-gradient-to-r from-purple-800 to-purple-950">
-        <div className="flex justify-center items-center gap-2">
-          <div className="flex items-center justify-between p-4">
+        <div className="flex flex-col sm:flex-row justify-center items-center gap-2">
+          <div className="flex items-center justify-between p-2 sm:p-4 w-full sm:w-auto">
             <button
               onClick={() => setIsModelModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base w-full sm:w-auto justify-center"
             >
               <span className="font-medium">
                 {selectedModel.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
@@ -101,8 +101,8 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({
       />
 
       {/* Middle Section - Scrollable Image Gallery */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border-2 border-yellow-400/30 shadow-lg">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-6">
+        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-2 sm:p-4 border-2 border-yellow-400/30 shadow-lg h-full">
           <ImageGallery 
             images={generatedImages}
             userId={userId}
@@ -111,8 +111,8 @@ export const CenterPanel: React.FC<CenterPanelProps> = ({
       </div>
 
       {/* Bottom Section - Fixed Prompt Inputs */}
-      <div className="p-6 border-t border-yellow-400/30 bg-gradient-to-r from-purple-50 to-blue-50">
-        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border-2 border-yellow-400/30 shadow-lg">
+      <div className="p-3 sm:p-6 border-t border-yellow-400/30 bg-gradient-to-r from-purple-50 to-blue-50">
+        <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-2 sm:p-4 border-2 border-yellow-400/30 shadow-lg">
           <PromptInput
             selectedPresetIds={selectedPresetIds}
             currentPrompt={currentPrompt}
